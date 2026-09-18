@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Holographic hand-tracking interface — single-command launch",
   "scripts": {
+    "build": "cd client && npm install && npm run build",
     "start": "npm run build:client && npm run serve",
     "serve": "node -e \"require('dotenv').config({path:'./server/.env'}); process.chdir('./server'); require('ts-node').register(); require('./server/src/server.ts');\"",
     "build:client": "cd client && npm run build",
