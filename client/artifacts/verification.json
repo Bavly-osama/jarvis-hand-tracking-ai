@@ -1,0 +1,13 @@
+{
+  "render_errors": [],
+  "checks": {
+    "active": 3,
+    "cards": 10,
+    "zoom": 1.6,
+    "finite": true,
+    "selectedForward": true,
+    "depth": 4.919999525890836
+  },
+  "portrait_controls": "all inside viewport",
+  "protected_interactions": "selection and zoom APIs exercised"
+}

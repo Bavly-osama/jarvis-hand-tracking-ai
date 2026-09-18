@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Holographic Hand-Tracking Interface" />
+    <title>ORBIT — Spatial Command</title>
+    <!-- MediaPipe CDN scripts (must run before application code) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/src/ui/command.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+    <header class="identity"><span class="identity-mark">&#9673;</span><div>O R B I T<small>SPATIAL COMMAND INTERFACE</small></div></header>
+    <aside class="instrument instrument-left" aria-hidden="true"><span>PLANETARY REFERENCE</span><strong>TERRA / SOL III</strong><i></i><dl><dt>REFERENCE FRAME</dt><dd>WGS 84</dd><dt>MEAN RADIUS</dt><dd>6,371 <em>KM</em></dd><dt>AXIAL INCLINATION</dt><dd>23.44 <em>DEG</em></dd></dl></aside>
+    <aside class="instrument instrument-right" aria-hidden="true"><span>ORBITAL OBSERVATORY</span><strong>EARTH SYSTEM</strong><i></i><p>ATMOSPHERE<br>SURFACE<br>COMMUNICATION PATHS</p><small>SCHEMATIC VISUALIZATION</small></aside>
+    <div class="scene-caption" aria-hidden="true"><span>EARTH</span><small>PLANETARY SYSTEM / SPATIAL REFERENCE</small></div>
+    <div class="footer-brand" aria-hidden="true">HUMAN × INTELLIGENCE<span>EXPLORE · CONNECT · CREATE</span></div>
+    <!-- Initial 2-Button Mode Selection Modal -->
+    <div id="modal-mode-select">
+      <div class="modal-card">
+        <div class="modal-badge">O R B I T / INITIALIZE</div>
+        <h1 class="modal-title">Enter spatial command</h1>
+        <p class="modal-subtitle">Choose how you move through the environment.</p>
+
+        <div class="modal-options">
+          <!-- Button 1: Camera Mode -->
+          <button id="modal-btn-camera" class="modal-option-btn" type="button">
+            <div class="option-icon">&#9678;</div>
+            <div class="option-info">
+              <div class="option-label">Hand tracking</div>
+              <div class="option-desc">Control with hand gestures in 3D space using your webcam</div>
+            </div>
+            <div class="option-tag">WEBCAM REQUIRED</div>
+          </button>
+
+          <!-- Button 2: PC Mode -->
+          <button id="modal-btn-pc" class="modal-option-btn primary" type="button">
+            <div class="option-icon">&#8984;</div>
+            <div class="option-info">
+              <div class="option-label">Mouse & touch</div>
+              <div class="option-desc">Control with mouse drag, wheel zoom, touch & HUD buttons (No camera)</div>
+            </div>
+            <div class="option-tag highlight">NO WEBCAM NEEDED</div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- In-UI Notification Toast -->
+    <div id="holo-notification"></div>
+
+    <!-- Top Mode Switcher (Camera vs PC/Touch) -->
+    <div id="mode-selector">
+      <button id="btn-mode-camera" class="holo-btn" title="Control with Camera Hand Tracking">&#9678; HAND TRACKING</button>
+      <button id="btn-mode-touch" class="holo-btn active" title="Control with Mouse / Touch Screen (No Camera)">&#8984; MOUSE / TOUCH</button>
+    </div>
+
+    <!-- Main Three.js canvas container -->
+    <div id="app-container"></div>
+
+    <!-- Camera feed (hidden unless debug mode) -->
+    <video id="input_video" autoplay playsinline muted></video>
+
+    <!-- HUD corner accents -->
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+
+    <!-- On-screen Navigation Controls (Touch / Mouse friendly) -->
+    <div id="touch-nav">
+      <button id="btn-prev" class="holo-nav-btn" title="Previous Module">◄ PREV</button>
+      <button id="btn-select" class="holo-nav-btn primary" title="Select / Click Module">&#9671; SELECT</button>
+      <button id="btn-zoom" class="holo-nav-btn" title="Toggle Earth Zoom">+ ZOOM</button>
+      <button id="btn-next" class="holo-nav-btn" title="Next Module">NEXT ►</button>
+    </div>
+
+    <!-- Status bar -->
+    <div id="status-bar">HOLOGRAPHIC INTERFACE · READY</div>
+    <div id="debug-hint">[ ` ] DEBUG</div>
+
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

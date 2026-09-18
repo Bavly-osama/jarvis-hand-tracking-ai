@@ -1,0 +1,13 @@
+{
+  "name": "holographic-ui",
+  "version": "1.0.0",
+  "description": "Holographic hand-tracking interface — single-command launch",
+  "scripts": {
+    "start": "npm run build:client && npm run serve",
+    "serve": "node -e \"require('dotenv').config({path:'./server/.env'}); process.chdir('./server'); require('ts-node').register(); require('./server/src/server.ts');\"",
+    "build:client": "cd client && npm run build",
+    "dev": "npm run build:client && npm run start:server",
+    "start:server": "cd server && npm run dev"
+  },
+  "private": true
+}

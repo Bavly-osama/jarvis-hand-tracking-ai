@@ -1,0 +1,162 @@
+import * as THREE from 'three';
+import { HolographicCard } from './HolographicCard';
+import { PhysicsController } from '../animation/PhysicsController';
+import gsap from 'gsap';
+
+import { NavigationState } from '../interaction/NavigationState';
+import { MODULES } from '../experiences/modules';
+const CARD_TITLES = MODULES;
+
+const NUM_CARDS   = CARD_TITLES.length;
+const RADIUS      = 3.9;
+const CARD_STEP   = (Math.PI * 2) / NUM_CARDS;
+
+export class CarouselController {
+  public group: THREE.Group;
+  private cards: HolographicCard[] = [];
+
+  public carouselAngle = 0;
+  public presentation = { open: 0, anticipation: 0, pulse: 0 };
+  public navigation = new NavigationState(NUM_CARDS);
+  public enabled = true;
+  public onNavigate: ((direction: number) => void) | null = null;
+  private timeline?: gsap.core.Timeline;
+  private outgoingIndex = 0;
+  private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  // Hover
+  private hoveredIndex: number = -1;
+
+  constructor() {
+    this.group = new THREE.Group();
+    for (let i = 0; i < NUM_CARDS; i++) {
+      const card = new HolographicCard(CARD_TITLES[i]);
+      this.cards.push(card);
+      this.group.add(card.group);
+    }
+  }
+
+  // ── Gesture API ────────────────────────────────────────────────────────────
+
+  /**
+   * Add angular velocity from a swipe gesture.
+   * velocityX is normalised hand velocity (positive = rightward in camera space → carousel rotates left)
+   * @param velocityX normalised velocity in range ±1..±3 typical
+   */
+  public swipe(velocityX: number): boolean {
+    if (!this.enabled) return false;
+    const old = this.navigation.index;
+    if (!this.navigation.swipe(velocityX)) return false;
+    this.animateSlot(old, velocityX < 0 ? 1 : -1);
+    return true;
+  }
+  public observeNeutral(neutral: boolean, dt: number) { this.navigation.observeNeutral(neutral, dt); }
+  public selectCard(index: number): boolean {
+    if (!this.enabled) return false;
+    const old = this.navigation.index;
+    if (!this.navigation.select(index)) return false;
+    let difference = this.navigation.index - old;
+    if (difference > NUM_CARDS / 2) difference -= NUM_CARDS;
+    if (difference < -NUM_CARDS / 2) difference += NUM_CARDS;
+    this.animateSlot(old, difference);
+    return true;
+  }
+  public step(direction: number) { return this.selectCard(this.navigation.index + direction); }
+  public getActiveCard() { return this.navigation.index; }
+  public get isAnimating() { return this.navigation.isAnimating; }
+  private animateSlot(old: number, direction: number) {
+    this.outgoingIndex = old;
+    const target = this.carouselAngle + direction * CARD_STEP;
+    this.timeline?.kill();
+    this.onNavigate?.(direction);
+    this.presentation.pulse = Math.sign(direction);
+    if (this.reduced.matches) {
+      this.timeline = gsap.timeline({onComplete: () => this.navigation.completeTransition()})
+        .to(this, {carouselAngle: target, duration: 0.15, ease: 'power2.out'});
+      return;
+    }
+    this.timeline = gsap.timeline({onComplete: () => {
+      this.carouselAngle = target; this.navigation.completeTransition();
+      this.presentation.anticipation = 0; this.presentation.pulse = 0;
+    }});
+    this.timeline.to(this.presentation, {anticipation: -Math.sign(direction) * 0.13, duration: 0.11, ease: 'power2.out'}, 0.06)
+      .to(this, {carouselAngle: target + Math.sign(direction) * 0.016, duration: 0.39, ease: 'power3.inOut'}, 0.15)
+      .to(this.presentation, {anticipation: 0, duration: 0.25}, 0.2)
+      .to(this, {carouselAngle: target, duration: 0.16, ease: 'power2.out'}, 0.54);
+  }
+
+  /** Notify of a hover change (affects card glow) */
+  public setHover(index: number) {
+    if (index === this.hoveredIndex) return;
+    if (this.hoveredIndex >= 0) this.cards[this.hoveredIndex].setHover(false);
+    this.hoveredIndex = index;
+    if (index >= 0) this.cards[index].setHover(true);
+  }
+
+  // ── Per-frame update ───────────────────────────────────────────────────────
+
+  public update(delta: number, time: number) {
+    delta = Math.min(delta, 0.05);
+    const activeIndex = this.navigation.index;
+    const opening = this.presentation.open;
+    // ── Position each card on the circle ──────────────────────────────────
+    for (let i = 0; i < NUM_CARDS; i++) {
+      const cardBaseAngle = i * CARD_STEP;
+      const relAngle      = cardBaseAngle - this.carouselAngle;
+
+      // Normalize to [-π, π]
+      const normAngle = ((relAngle + Math.PI) % (Math.PI * 2)) - Math.PI;
+
+      // Position on circle
+      const x = Math.sin(normAngle) * RADIUS + (i === this.outgoingIndex ? this.presentation.anticipation : 0);
+      const z = Math.cos(normAngle) * 2.3; // offset so front cards are near origin
+
+      // Depth factor: 1 at front, 0 at back
+      const depth = (Math.cos(normAngle) + 1) * 0.5;
+
+      // Active card: push forward, full scale
+      const isActive = i === activeIndex;
+      const targetZ = isActive ? z + 0.32 + opening * 1.6 : z - opening * 4;
+      const targetScl = isActive
+        ? 1.14 * (1 + opening * 2.0)
+        : PhysicsController.remap(depth, 0, 1, 0.68, 0.94);
+
+      // Smooth position / scale
+      this.cards[i].group.position.x = PhysicsController.lerp(this.cards[i].group.position.x, x * (isActive ? 1 - opening : 1 + opening * 0.3), delta * 10);
+      this.cards[i].group.position.z = PhysicsController.lerp(this.cards[i].group.position.z, targetZ, delta * 10);
+      this.cards[i].group.position.y = -0.95 + (isActive ? opening * 1.0 : 0) + (1 - depth) * 0.65 + (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : Math.sin(time * 0.45 + i) * 0.018);
+
+      const currentScale = this.cards[i].group.scale.x;
+      const newScale = PhysicsController.lerp(currentScale, targetScl, delta * 10);
+      this.cards[i].group.scale.setScalar(newScale);
+
+      // Face center
+      this.cards[i].group.rotation.y = PhysicsController.lerp(this.cards[i].group.rotation.y, -Math.sin(normAngle) * 0.42, delta * 8);
+      this.cards[i].group.visible = window.innerWidth / window.innerHeight >= 0.8 || depth > 0.87;
+
+      // Opacity via material uniform
+      const mat = (this.cards[i].mesh.material as THREE.ShaderMaterial).uniforms;
+      const visibility = isActive ? 1 - Math.max(0, (opening - 0.48) / 0.52) : 1 - Math.min(1, opening * 1.7);
+      this.cards[i].setPresentationVisibility(visibility);
+      const targetOpacity = PhysicsController.remap(depth, 0, 1, 0.26, 0.92) * visibility;
+      mat.opacity.value = PhysicsController.lerp(mat.opacity.value, targetOpacity, delta * 8);
+
+      // Set selected state on active card
+      this.cards[i].setSelected(isActive);
+
+      // Update card internals
+      this.cards[i].update(time, delta);
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Return cards array for interaction raycasting */
+  public getCardMeshes(): THREE.Object3D[] {
+    return this.cards.map(c => c.mesh);
+  }
+
+  /** Return card objects (for magnetic tilt from hand position) */
+  public getCards(): HolographicCard[] {
+    return this.cards;
+  }
+}
