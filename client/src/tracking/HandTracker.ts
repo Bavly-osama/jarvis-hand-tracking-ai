@@ -23,15 +23,16 @@ export class HandTracker {
   constructor(){
     if(typeof Hands==='undefined')return;
     this.hands=new Hands({locateFile:(file:string)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
-    this.hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.5,minTrackingConfidence:.5});
+    this.hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.45,minTrackingConfidence:.35});
     this.hands.onResults((results:any)=>{
       if(!this.running||this.sentGeneration!==this.generation)return;
       const now=performance.now();this.metrics.inferenceMs=now-this.inferenceStart;this.trackingFrames++;
       const landmarks=results.multiHandLandmarks??[];
-      this.callback?.({timestamp:now,space:'camera',hands:landmarks.map((landmarks:any,i:number)=>({
+      const video=this.video;
+      this.callback?.({timestamp:now,space:'camera',
+        video:video&&video.videoWidth?{width:video.videoWidth,height:video.videoHeight}:undefined,
+        hands:landmarks.map((landmarks:any,i:number)=>({
         landmarks,handedness:results.multiHandedness?.[i]?.label??'UNKNOWN',
-        // Legacy Hands exposes no per-frame tracking probability. Omit quality:
-        // the engine validates geometry and temporal continuity; handedness.score is NOT quality.
       }))});
     });
   }

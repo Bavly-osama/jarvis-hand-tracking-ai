@@ -155,7 +155,7 @@ export class HolographicHandRenderer {
   }
 
   public updateLandmarks(landmarks: Landmark[] | null, presenceState: HandPresenceState, opacity: number): void {
-    if (!landmarks || landmarks.length !== 21 || presenceState === HandPresenceState.HAND_LOST) {
+    if (!landmarks || landmarks.length !== 21 || presenceState === HandPresenceState.LOST) {
       this.group.visible = false;
       return;
     }
@@ -167,13 +167,14 @@ export class HolographicHandRenderer {
     let isPulse = false;
 
     switch (presenceState) {
-      case HandPresenceState.HAND_VISIBLE:
+      case HandPresenceState.TRACKED:
         stateOpacity = 0.7;
         break;
-      case HandPresenceState.HAND_WEAK:
+      case HandPresenceState.REACQUIRING:
+      case HandPresenceState.UNCERTAIN:
         stateOpacity = 0.45;
         break;
-      case HandPresenceState.HAND_PREDICTED:
+      case HandPresenceState.TEMPORARILY_LOST:
         stateOpacity = 0.25;
         isPulse = true;
         break;

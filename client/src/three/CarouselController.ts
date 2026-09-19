@@ -33,13 +33,13 @@ export class CarouselController {
   private pressProgress=0;
 
   public beginHandDrag(){
-    if(!this.enabled)return;
+    if(!this.enabled||this.handDragging)return;
     this.timeline?.kill();this.navigation.completeTransition();this.presentation.anticipation=0;
     this.handDragging=true;this.handStartAngle=this.carouselAngle;this.handOffset=0;
   }
   public dragHand(deltaX:number){
     if(!this.handDragging||!Number.isFinite(deltaX))return;
-    this.handOffset+=deltaX*3.2;
+    this.handOffset+=deltaX;
     // Rightward displacement reduces angle, moving the visible rail right.
     const limit=CARD_STEP*1.2;
     const offset=limit*Math.tanh(this.handOffset/limit);

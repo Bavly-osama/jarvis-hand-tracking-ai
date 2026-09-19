@@ -17,8 +17,9 @@ import { AudioEventSystem }       from '../audio/AudioEventSystem';
 import { CameraStateOverlay }     from '../ui/CameraStateOverlay';
 import { GestureCoachmarks }      from '../ui/GestureCoachmarks';
 import { HolographicHandRenderer } from '../visual/HolographicHandRenderer';
-import { HandPresenceState, LM }  from '../tracking/NormalizedHandState';
+import { HandPresenceState }  from '../tracking/NormalizedHandState';
 import { Landmark }               from '../tracking/LandmarkFilter';
+import { HandDebugLayer }         from '../debug/HandDebugLayer';
 
 // ─── Gesture pipeline thresholds ────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ async function bootstrap() {
   // ── DOM elements ─────────────────────────────────────────────────────────
   const container = document.getElementById('app-container');
   if (!container) throw new Error('Missing #app-container');
+  const stage = container;
   const video = document.getElementById('input_video') as HTMLVideoElement;
   if (!video) throw new Error('Missing #input_video');
 
@@ -63,6 +65,7 @@ async function bootstrap() {
   // ── New hand interaction modules ──────────────────────────────────────────
   const handRenderer = new HolographicHandRenderer(scene.scene, scene.camera);
   const handControl = new HandSceneController(scene, carousel, experiences, cursor, audio);
+  const debugHands = new HandDebugLayer(document.getElementById('hand-debug-layer') as HTMLCanvasElement);
 
   // ── Pointer / Touch Controller (No-Camera Mode) ──────────────────────────
   const pointerController = new PointerTouchController(
@@ -115,7 +118,10 @@ async function bootstrap() {
     coachmarks.hide();
     cameraOverlay.hide();
     pointerController.enable();
-    handRenderer.updateLandmarks(null, HandPresenceState.HAND_LOST, 0);
+    stage.classList.remove('camera-live');
+    document.body.classList.remove('camera-live');
+    debugHands.clear();
+    handRenderer.updateLandmarks(null, HandPresenceState.LOST, 0);
 
     if (btnModeTouch && btnModeCamera) {
       btnModeTouch.classList.add('active');
@@ -136,6 +142,8 @@ async function bootstrap() {
     aiBridge.cancelPending();
     handControl.reset();
     pointerController.disable();
+    stage.classList.add('camera-live');
+    document.body.classList.add('camera-live');
 
     if (btnModeTouch && btnModeCamera) {
       btnModeCamera.classList.add('active');
@@ -245,7 +253,10 @@ async function bootstrap() {
   let latestRawLandmarks: Landmark[] | null = null;
   let isLandmarkDebug = false;
   window.addEventListener('keydown', e => {
-    if(import.meta.env.DEV && e.key.toLowerCase()==='l')isLandmarkDebug=!isLandmarkDebug;
+    if(import.meta.env.DEV && e.key.toLowerCase()==='l'){
+      isLandmarkDebug=!isLandmarkDebug;
+      stage.classList.toggle('debug-hands',isLandmarkDebug);
+    }
   });
   let stateKey='';
   let uncertainSince=0;
@@ -254,6 +265,7 @@ async function bootstrap() {
   const feedHand = (frame:HandFrame) => {
     if(!isCameraMode || document.hidden || !interactionFocused)return;
     const begin=performance.now();
+    frame.stage={width:innerWidth,height:innerHeight};
     const r=handControl.process(frame);
     latestRawLandmarks=r.raw;
     const key=r.state+':'+r.target+':'+experiences.state.state;
@@ -282,10 +294,24 @@ async function bootstrap() {
       lastTelemetry=performance.now();
       const fields:Record<string,string|number>={hand:r.handedness,handCount:r.handCount,presence:r.presence.state,
         trackConf:r.quality.toFixed(2),palmOpen:r.openness.toFixed(2),pose:r.pose,gesture:r.state,
-        pinch:r.pinchDistance.toFixed(3),velocity:r.velocity.x.toFixed(3),velocityY:r.velocity.y.toFixed(3),
-        velocityZ:r.velocity.z.toFixed(3),activeCard:r.target??'none',zoom:experiences.getZoom().toFixed(2),
+        pinch:r.pinchDistance.toFixed(3),pinchRatio:(r.pinchRatio??r.pinchDistance).toFixed(3),
+        pinchThr:`${r.pinchThresholdDown ?? .22} / ${r.pinchThresholdRelease ?? .34}`,
+        pinchTarget:r.capturedTarget??'none',
+        velocity:r.velocity.x.toFixed(3),velocityY:r.velocity.y.toFixed(3),
+        velocityZ:r.velocity.z.toFixed(3),activeCard:r.capturedTarget??r.target??'none',zoom:experiences.getZoom().toFixed(2),
+        zoomDist:(r.zoomDistance??0).toFixed(3),zoomStart:(r.zoomStartDistance??0).toFixed(3),zoomRatio:(r.zoomRatio??1).toFixed(3),
         rawXY:r.raw? r.raw[8].x.toFixed(3)+', '+r.raw[8].y.toFixed(3):'—',
         filteredXY:r.pointer?r.pointer.x.toFixed(3)+', '+r.pointer.y.toFixed(3):'—',
+        h1State:r.hands?.[0]?.state??'—',h1Conf:(r.hands?.[0]?.confidence??0).toFixed(2),
+        h1Raw:r.hands?.[0]?`${r.hands[0].rawX.toFixed(3)}, ${r.hands[0].rawY.toFixed(3)}`:'—',
+        h1Filt:r.hands?.[0]?`${r.hands[0].filteredX.toFixed(3)}, ${r.hands[0].filteredY.toFixed(3)}`:'—',
+        h1Vel:r.hands?.[0]?`${r.hands[0].velocityX.toFixed(3)}, ${r.hands[0].velocityY.toFixed(3)}`:'—',
+        h1Hand:r.hands?.[0]?.handedness??'—',
+        h2State:r.hands?.[1]?.state??'—',h2Conf:(r.hands?.[1]?.confidence??0).toFixed(2),
+        h2Raw:r.hands?.[1]?`${r.hands[1].rawX.toFixed(3)}, ${r.hands[1].rawY.toFixed(3)}`:'—',
+        h2Filt:r.hands?.[1]?`${r.hands[1].filteredX.toFixed(3)}, ${r.hands[1].filteredY.toFixed(3)}`:'—',
+        h2Vel:r.hands?.[1]?`${r.hands[1].velocityX.toFixed(3)}, ${r.hands[1].velocityY.toFixed(3)}`:'—',
+        h2Hand:r.hands?.[1]?.handedness??'—',
         classifyMs:(performance.now()-begin).toFixed(2),cameraFps:tracker.metrics.cameraFPS.toFixed(1),
         trackingFps:tracker.metrics.trackingFPS.toFixed(1),inferenceMs:tracker.metrics.inferenceMs.toFixed(1),
         socket:socket.isConnected()?'connected':'offline',localIntent:r.state,final:r.clickTarget??r.state};
@@ -342,7 +368,15 @@ async function bootstrap() {
       const presence=handControl.render(performance.now());
       handRenderer.updateLandmarks(presence.landmarks,presence.state,presence.opacity);
       handRenderer.setDebugMode(isLandmarkDebug?latestRawLandmarks:null,isLandmarkDebug?handControl.result?.landmarks??null:null,
-        isLandmarkDebug&&presence.state===HandPresenceState.HAND_PREDICTED?presence.landmarks:null);
+        isLandmarkDebug&&presence.state===HandPresenceState.TEMPORARILY_LOST?presence.landmarks:null);
+      if(isLandmarkDebug&&(handControl.result?.raw||handControl.result?.landmarks)){
+        debugHands.draw(
+          [{landmarks:handControl.result.raw??handControl.result.landmarks??[]}],
+          null,
+          isCameraMode?'camera':'logical',
+          video
+        );
+      }else if(!isLandmarkDebug)debugHands.clear();
     }
 
     experiences.update(delta, elapsed);

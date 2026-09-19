@@ -1,9 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 :root{color-scheme:dark;--ice:#cee1ec;--muted:#6f8c9f;--line:#48697d55;--amber:#c9ab7b}
 *{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#030910;color:var(--ice);font-family:'IBM Plex Mono',Consolas,monospace;user-select:none}
-#app-container{position:fixed;inset:0}#app-container canvas{display:block;width:100%;height:100%}
-.atmosphere{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 38%,#3761880a 0%,transparent 48%,#01050a99 100%);box-shadow:inset 0 0 160px #0005}
-#input_video{position:fixed;bottom:100px;right:24px;width:150px;height:110px;object-fit:cover;opacity:0;pointer-events:none;transform:scaleX(-1);z-index:100}.debug-mode #input_video{opacity:.65}
+#app-container,.jarvis-stage{position:fixed;inset:0}
+.jarvis-stage .camera-feed,#input_video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;pointer-events:none;transform:scaleX(-1);z-index:0;filter:saturate(1.05) contrast(1.05)}
+.jarvis-stage.camera-live .camera-feed,.jarvis-stage.camera-live #input_video{opacity:.64}
+.jarvis-stage .camera-hud-overlay{position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 42%,rgba(20,70,110,.12) 0%,transparent 46%,rgba(1,8,16,.38) 100%);box-shadow:inset 0 0 140px rgba(0,40,70,.28)}
+.jarvis-stage.camera-live .camera-hud-overlay:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(80,180,255,.05) 48%,transparent 52%);animation:jarvis-scan 7s linear infinite;opacity:.55}
+@keyframes jarvis-scan{0%{transform:translateY(-8%)}100%{transform:translateY(8%)}}
+.jarvis-stage .hand-debug-layer{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;opacity:0}
+.jarvis-stage.debug-hands .hand-debug-layer{opacity:1}
+.jarvis-stage canvas.jarvis-effects{position:absolute;inset:0;z-index:3;display:block;width:100%;height:100%;background:transparent}
+#app-container canvas:not(.hand-debug-layer){display:block;width:100%;height:100%}
+.atmosphere{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 38%,#37618808 0%,transparent 52%,#01050a55 100%);box-shadow:inset 0 0 120px #0003}
+body.camera-live .atmosphere{background:radial-gradient(ellipse at 50% 38%,#2a6a9310 0%,transparent 52%,#01050a30 100%);box-shadow:inset 0 0 90px #0002}
 .identity{position:fixed;top:31px;left:38px;display:flex;align-items:center;gap:16px;z-index:4;font:500 23px 'Barlow Condensed',sans-serif;letter-spacing:4px;pointer-events:none}.identity-mark{font-size:34px;color:#99bed2}.identity small{display:block;font:8px 'IBM Plex Mono',monospace;letter-spacing:2.2px;color:var(--muted);margin-top:6px}
 .instrument{position:fixed;top:24%;z-index:3;pointer-events:none;width:190px;font-size:9px;letter-spacing:1.5px;color:var(--muted)}.instrument-left{left:5%}.instrument-right{right:5%;text-align:right}.instrument strong{display:block;font-weight:400;color:#abc6d7;font-size:13px;letter-spacing:2px;margin-top:10px}.instrument i{display:block;width:90px;height:1px;background:#648da9;margin:18px 0 24px}.instrument-right i{margin-left:auto}.instrument dt{font-size:8px;margin:17px 0 5px}.instrument dd{font-size:15px;color:#b3c6d3}.instrument em{font-style:normal;font-size:8px;color:#7690a1}.instrument p{line-height:2.5;font-size:9px}.instrument small{display:block;font-size:7px;color:#9a8c77;margin-top:23px}
 .scene-caption{position:fixed;top:13%;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;z-index:3}.scene-caption span{font:400 13px 'Barlow Condensed',sans-serif;letter-spacing:9px;color:#b2c8d8}.scene-caption small{display:block;font-size:7px;letter-spacing:2px;color:#637e93;margin-top:8px}

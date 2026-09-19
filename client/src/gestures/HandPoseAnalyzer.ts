@@ -75,7 +75,8 @@ export class HandPoseAnalyzer {
     const wrist = landmarks[LM.WRIST];
     const middleMcp = landmarks[LM.MIDDLE_MCP];
     const handSize = dist(wrist, middleMcp);
-    const sizeNorm = Math.max(handSize, 0.01);
+    const palmWidth = dist(landmarks[LM.INDEX_MCP], landmarks[LM.PINKY_MCP]);
+    const sizeNorm = Math.max(palmWidth, handSize, 0.01);
 
     // Per-finger analysis
     const fingerStates: FingerState[] = [];

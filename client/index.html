@@ -57,11 +57,11 @@
       <button id="btn-mode-touch" class="holo-btn active" title="Control with Mouse / Touch Screen (No Camera)">&#8984; MOUSE / TOUCH</button>
     </div>
 
-    <!-- Main Three.js canvas container -->
-    <div id="app-container"></div>
-
-    <!-- Camera feed (hidden unless debug mode) -->
-    <video id="input_video" autoplay playsinline muted></video>
+    <div id="app-container" class="jarvis-stage">
+      <video id="input_video" class="camera-feed" autoplay playsinline muted></video>
+      <canvas id="hand-debug-layer" class="hand-debug-layer"></canvas>
+      <div class="camera-hud-overlay" aria-hidden="true"></div>
+    </div>
 
     <!-- HUD corner accents -->
     <div class="hud-corner tl"></div>

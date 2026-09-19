@@ -196,7 +196,7 @@ export class ExperienceController {
     else if(this.view&&this.name!=='Game'&&this.name!=='Security'){this.view.group.rotation.y+=dx;this.view.group.rotation.x=THREE.MathUtils.clamp(this.view.group.rotation.x+dy,-.6,.6);}
   }
   getZoom(){return this.zoomValue;}
-  zoom(scale:number){if(!Number.isFinite(scale)||(!this.isHome&&!this.active))return;this.zoomValue=THREE.MathUtils.clamp(scale,.7,2.5);if(this.isHome)this.carousel.setHandZoom(this.zoomValue);else if(this.name==='Earth')this.globe.applyZoom(this.zoomValue);}
+  zoom(scale:number){if(!Number.isFinite(scale)||(!this.isHome&&!this.active))return;this.zoomValue=THREE.MathUtils.clamp(scale,.6,2.5);if(this.isHome)this.carousel.setHandZoom(this.zoomValue);else if(this.name==='Earth')this.globe.applyZoom(this.zoomValue);}
   private pulse(){if(!this.view)return;this.burstTime=.5;this.view.burst.position.copy(this.aim);this.view.burst.position.z=.15;this.view.burst.visible=true;}
   private processCommand(){
     if(!this.active||this.aiTime>0)return;

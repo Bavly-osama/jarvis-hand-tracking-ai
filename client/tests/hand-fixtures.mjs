@@ -8,5 +8,11 @@ export function hand(x=.5, y=.5, pinch=1, pose='open', scale=1) {
 }
 export const trajectories = {
   moveRight:[.40,.43,.47,.52,.58], moveLeft:[.60,.56,.50,.44,.38],
-  jitter:[.500,.503,.498,.502,.499], zoomIn:[.25,.32,.40,.50],zoomOut:[.50,.42,.34,.27]
+  jitter:[.500,.503,.498,.502,.499], zoomIn:[.25,.32,.40,.50],zoomOut:[.50,.42,.34,.27],
+  slowRight:[.40,.405,.41,.415,.42,.425],
+  fastRight:[.40,.48,.58,.68],
+  spike:[.40,.42,.43,.90,.44],
+  zoomInSpec:[.20,.24,.30,.37,.45],
+  zoomOutSpec:[.45,.40,.34,.28,.22],
+  zoomJitter:[.300,.302,.299,.301],
 };

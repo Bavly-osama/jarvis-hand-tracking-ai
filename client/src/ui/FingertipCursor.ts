@@ -40,7 +40,7 @@ export class FingertipCursor {
   private tapProgress:   number = 0;
 
   // Presence
-  private presenceState: HandPresenceState = HandPresenceState.HAND_LOST;
+  private presenceState: HandPresenceState = HandPresenceState.LOST;
   private targetOpacity: number = 0;
   private currentOpacity: number = 0;
 
@@ -194,7 +194,7 @@ export class FingertipCursor {
     this.presenceState = state;
     this.targetOpacity = opacity;
 
-    if (state === HandPresenceState.HAND_LOST) {
+    if (state === HandPresenceState.LOST) {
       this.targetOpacity = 0;
     }
   }
@@ -203,6 +203,12 @@ export class FingertipCursor {
 
   public setTapProgress(progress: number): void {
     this.tapProgress = Math.max(0, Math.min(1, progress));
+  }
+
+  public setPinchState(state: string, clicked: boolean): void {
+    if (state === 'PINCH_CANDIDATE') this.tapProgress = Math.max(this.tapProgress, 0.35);
+    if (state === 'PINCHED') this.tapProgress = 1;
+    if (clicked) this.pulse();
   }
 
   // ── Magnetic attraction feedback ──────────────────────────────────────
@@ -292,7 +298,7 @@ export class FingertipCursor {
     dotMat.opacity = 0.95 * opacityMult;
 
     // Presence-based visual effects
-    if (this.presenceState === HandPresenceState.HAND_PREDICTED) {
+    if (this.presenceState === HandPresenceState.TEMPORARILY_LOST) {
       // Pulsing effect for predicted state
       const predictPulse = Math.sin(elapsed * 6) * 0.15 + 0.85;
       ringMat.opacity = opacityMult * predictPulse;

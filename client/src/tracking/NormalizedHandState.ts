@@ -3,10 +3,11 @@ import { Landmark } from './LandmarkFilter';
 // ─── Presence states ────────────────────────────────────────────────────────
 
 export enum HandPresenceState {
-  HAND_VISIBLE   = 'HAND_VISIBLE',
-  HAND_WEAK      = 'HAND_WEAK',
-  HAND_PREDICTED = 'HAND_PREDICTED',
-  HAND_LOST      = 'HAND_LOST',
+  TRACKED = 'TRACKED',
+  UNCERTAIN = 'UNCERTAIN',
+  TEMPORARILY_LOST = 'TEMPORARILY_LOST',
+  LOST = 'LOST',
+  REACQUIRING = 'REACQUIRING',
 }
 
 // ─── Semantic hand poses ────────────────────────────────────────────────────

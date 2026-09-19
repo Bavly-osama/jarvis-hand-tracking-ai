@@ -5,7 +5,7 @@ export interface Landmark {
 }
 
 export class OneEuroFilter {
-  private minCutoff: number;
+  minCutoff: number;
   private beta: number;
   private dCutoff: number;
   private xPrev: number | null = null;

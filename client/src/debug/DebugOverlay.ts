@@ -10,8 +10,26 @@ export class DebugOverlay {
 
   private readonly FIELD_DEFS: { key: string; label: string }[] = [
     {key:'handCount',label:'Hands'},
+    {key:'h1State',label:'HAND 1 state'},
+    {key:'h1Conf',label:'HAND 1 confidence'},
+    {key:'h1Raw',label:'HAND 1 raw X/Y'},
+    {key:'h1Filt',label:'HAND 1 filtered X/Y'},
+    {key:'h1Vel',label:'HAND 1 velocity'},
+    {key:'h1Hand',label:'HAND 1 handedness'},
+    {key:'h2State',label:'HAND 2 state'},
+    {key:'h2Conf',label:'HAND 2 confidence'},
+    {key:'h2Raw',label:'HAND 2 raw X/Y'},
+    {key:'h2Filt',label:'HAND 2 filtered X/Y'},
+    {key:'h2Vel',label:'HAND 2 velocity'},
+    {key:'h2Hand',label:'HAND 2 handedness'},
     {key:'rawXY',label:'Raw logical X/Y'},
     {key:'filteredXY',label:'Filtered X/Y'},
+    {key:'pinchRatio',label:'PINCH ratio'},
+    {key:'pinchThr',label:'PINCH thresholds'},
+    {key:'pinchTarget',label:'PINCH candidate'},
+    {key:'zoomDist',label:'ZOOM distance'},
+    {key:'zoomStart',label:'ZOOM start distance'},
+    {key:'zoomRatio',label:'ZOOM ratio'},
     {key:'cameraFps',label:'Camera FPS'},
     {key:'inferenceMs',label:'Inference ms'},
     {key:'classifyMs',label:'Local pipeline ms'},
@@ -116,9 +134,9 @@ export class DebugOverlay {
 
     if (key === 'presence') {
       const s = value as string;
-      el.style.color = s === 'HAND_VISIBLE' ? '#00ff88'
-                     : s === 'HAND_WEAK' ? '#ffcc00'
-                     : s === 'HAND_PREDICTED' ? '#ff8800'
+      el.style.color = s === 'TRACKED' || s === 'HAND_VISIBLE' ? '#00ff88'
+                     : s === 'UNCERTAIN' || s === 'REACQUIRING' || s === 'HAND_WEAK' ? '#ffcc00'
+                     : s === 'TEMPORARILY_LOST' || s === 'HAND_PREDICTED' ? '#ff8800'
                      : '#ff4444';
     }
 

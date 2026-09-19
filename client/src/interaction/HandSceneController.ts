@@ -24,7 +24,11 @@ export class HandSceneController {
     if(!this.experiences.isHome){
       const now=performance.now();
       if(now-this.lastBounds>100){this.buttons=Array.from(document.querySelectorAll<HTMLButtonElement>('.experience-panel button')).filter(e=>!e.disabled&&e.getClientRects().length>0).map(element=>({element,rect:element.getBoundingClientRect()}));this.lastBounds=now;}
-      const button=this.buttons.find(({rect})=>x*innerWidth>=rect.left&&x*innerWidth<=rect.right&&y*innerHeight>=rect.top&&y*innerHeight<=rect.bottom);
+      const screenX=x*innerWidth,screenY=y*innerHeight;
+      const fromPoint=typeof document!=='undefined'?document.elementFromPoint(screenX,screenY):null;
+      const interactive=fromPoint?.closest?.('button,[data-interactive-card]');
+      if(interactive instanceof HTMLElement && interactive.id)return 'button:'+interactive.id;
+      const button=this.buttons.find(({rect})=>screenX>=rect.left&&screenX<=rect.right&&screenY>=rect.top&&screenY<=rect.bottom);
       if(button?.element.id)return 'button:'+button.element.id;
       if(this.experiences.active && x>.12&&x<.88&&y>.2&&y<.8)return 'experience';
       return null;
@@ -41,15 +45,17 @@ export class HandSceneController {
     const r=this.engine.process(frame,this.hitTest,{id:this.experiences.state.state+':'+this.experiences.name,home:this.experiences.isHome,scale:this.experiences.getZoom()});
     this.lastFrame=performance.now();this.result=r;
     if(r.pointer){this.experiences.pointer(r.pointer.x,r.pointer.y);screenToWorld(r.pointer,this.scene.camera,this.vector);this.cursor.updatePosition(this.vector.x,this.vector.y,this.vector.z);}
-    this.cursor.setAttractionStrength(r.target?1:0);this.cursor.setTapProgress(r.progress);
+    this.cursor.setAttractionStrength(r.target||r.capturedTarget?1:0);this.cursor.setTapProgress(r.progress);
+    this.cursor.setPinchState(r.pinchState,!!r.clickTarget);
     if(r.target!==this.lastTarget && r.target)this.audio.playCardSelect();
     this.lastTarget=r.target;
     this.carousel.setHover(r.target?.startsWith('card-')?Number(r.target.slice(5)):-1);
     this.carousel.setHandPress(r.progress>0?r.target:null,r.progress);
-    if(r.dragStart&&this.experiences.isHome)this.carousel.beginHandDrag();
-    if(r.state==='DRAG'){
+    const browsing=this.experiences.isHome&&r.mode!=='ZOOM'&&r.pinchState==='OPEN'&&(r.dragDelta.x||r.dragDelta.y);
+    if((r.dragStart||browsing)&&this.experiences.isHome)this.carousel.beginHandDrag();
+    if(r.state==='DRAG'||browsing){
       if(this.experiences.isHome)this.carousel.dragHand(r.dragDelta.x);
-      else this.experiences.rotate(r.dragDelta.x*3,r.dragDelta.y*3);
+      else if(r.state==='DRAG')this.experiences.rotate(r.dragDelta.x,r.dragDelta.y);
     }
     if(r.dragEnd)this.carousel.endHandDrag(r.velocity.x);
     if(r.zoom!==null)this.experiences.zoom(r.zoom);

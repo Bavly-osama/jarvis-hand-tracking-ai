@@ -18,14 +18,16 @@ export class SceneManager {
   private resize = () => this.onResize();
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   constructor(container: HTMLElement) {
-    this.scene.background = new THREE.Color('#030910');
-    this.scene.fog = new THREE.FogExp2('#030910', 0.026);
+    this.scene.background = null;
     this.camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false, powerPreference: 'high-performance' });
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.setClearAlpha(0);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
+    this.renderer.domElement.classList.add('jarvis-effects');
     container.appendChild(this.renderer.domElement);
     this.scene.add(new THREE.AmbientLight('#6384a3', 0.35));
     const key = new THREE.DirectionalLight('#c2dcf6', 2.1);
@@ -34,7 +36,9 @@ export class SceneManager {
     rim.position.set(4, 1, -3);
     this.scene.add(key, rim);
     this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const renderPass = new RenderPass(this.scene, this.camera);
+    renderPass.clearAlpha = 0;
+    this.composer.addPass(renderPass);
     // HDR threshold limits bloom to deliberately over-range highlights.
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.35, 1.05));
     this.composer.addPass(new OutputPass());

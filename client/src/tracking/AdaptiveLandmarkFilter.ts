@@ -150,10 +150,16 @@ export class AdaptiveLandmarkFilter {
           ? Math.min(SPEED_BOOST_MAX, 1 + (speed - SPEED_BOOST_THRESHOLD) * 10)
           : 1;
 
-        // Temporarily adjust filter for speed-adaptive behavior
-        const fx = handFilters[i * 3].filter(lm.x, timestamp);
-        const fy = handFilters[i * 3 + 1].filter(lm.y, timestamp);
-        const fz = handFilters[i * 3 + 2].filter(lm.z, timestamp);
+        const apply = (filter: OneEuroFilter, value: number) => {
+          const prevMin = filter.minCutoff;
+          filter.minCutoff = prevMin * speedFactor;
+          const out = filter.filter(value, timestamp);
+          filter.minCutoff = prevMin;
+          return out;
+        };
+        const fx = apply(handFilters[i * 3], lm.x);
+        const fy = apply(handFilters[i * 3 + 1], lm.y);
+        const fz = apply(handFilters[i * 3 + 2], lm.z);
 
         // Apply dead zone (only for stable landmarks when moving slowly)
         let finalX = fx, finalY = fy, finalZ = fz;
