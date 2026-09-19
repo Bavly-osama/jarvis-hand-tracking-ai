@@ -29,18 +29,22 @@ interface GestureRecord {
 const THRESHOLDS: Record<number, { enter: number; exit: number }> = {
   // IDLE / TRACKING — very low bar
   [GestureState.IDLE]:          { enter: 0.01, exit: 0.0 },
-  [GestureState.TRACKING]:      { enter: 0.30, exit: 0.15 },
-  // Active gestures
-  [GestureState.HOVER]:         { enter: 0.70, exit: 0.50 },
-  [GestureState.POINTING]:      { enter: 0.75, exit: 0.55 },
-  [GestureState.PINCHING]:      { enter: 0.82, exit: 0.60 },
-  [GestureState.GRABBING]:      { enter: 0.78, exit: 0.55 },
-  [GestureState.SWIPING_LEFT]:  { enter: 0.72, exit: 0.45 },
-  [GestureState.SWIPING_RIGHT]: { enter: 0.72, exit: 0.45 },
-  [GestureState.ZOOMING]:       { enter: 0.80, exit: 0.55 },
-  [GestureState.ROTATING]:      { enter: 0.75, exit: 0.50 },
-  [GestureState.CONFIRMING]:    { enter: 0.88, exit: 0.70 },
-  [GestureState.CANCELING]:     { enter: 0.85, exit: 0.65 },
+  [GestureState.TRACKING]:      { enter: 0.25, exit: 0.12 },
+  [GestureState.RECOVERING_TRACKING]: { enter: 0.20, exit: 0.10 },
+  // Active gestures — widened hysteresis for natural use
+  [GestureState.HOVER]:         { enter: 0.60, exit: 0.40 },
+  [GestureState.POINTING]:      { enter: 0.68, exit: 0.45 },
+  [GestureState.TAP_READY]:     { enter: 0.60, exit: 0.40 },
+  [GestureState.TAP_PRESSING]:  { enter: 0.55, exit: 0.35 },
+  [GestureState.TAP_RELEASE]:   { enter: 0.50, exit: 0.30 },
+  [GestureState.PINCHING]:      { enter: 0.78, exit: 0.55 },
+  [GestureState.GRABBING]:      { enter: 0.72, exit: 0.48 },
+  [GestureState.SWIPING_LEFT]:  { enter: 0.68, exit: 0.42 },
+  [GestureState.SWIPING_RIGHT]: { enter: 0.68, exit: 0.42 },
+  [GestureState.ZOOMING]:       { enter: 0.75, exit: 0.50 },
+  [GestureState.ROTATING]:      { enter: 0.70, exit: 0.45 },
+  [GestureState.CONFIRMING]:    { enter: 0.85, exit: 0.65 },
+  [GestureState.CANCELING]:     { enter: 0.82, exit: 0.60 },
 };
 
 // AI ambiguity band: gestures in this confidence range are sent to Gemini

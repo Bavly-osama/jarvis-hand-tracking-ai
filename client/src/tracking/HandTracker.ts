@@ -1,9 +1,13 @@
-﻿import { LandmarkFilter, Landmark } from './LandmarkFilter';
+import { AdaptiveLandmarkFilter } from './AdaptiveLandmarkFilter';
+import { Landmark } from './LandmarkFilter';
 
 export type HandTrackerCallback = (
   landmarks: Landmark[][],
   timestamp: number,
-  handedness: string[]
+  handedness: string[],
+  confidences: number[],
+  velocities: { x: number; y: number; z: number }[][],
+  rawLandmarks?: Landmark[][]
 ) => void;
 
 declare const Hands: any;
@@ -12,12 +16,13 @@ declare const Camera: any;
 export class HandTracker {
   private hands: any;
   private camera: any = null;
-  private filter: LandmarkFilter;
+  private filter: AdaptiveLandmarkFilter;
   private onResultsCallback: HandTrackerCallback | null = null;
   private isRunning: boolean = false;
+  private lastFrameId: number = -1;
 
   constructor() {
-    this.filter = new LandmarkFilter(2, 21);
+    this.filter = new AdaptiveLandmarkFilter(2, 21);
 
     if (typeof Hands === 'undefined') {
       console.warn(
@@ -34,8 +39,8 @@ export class HandTracker {
     this.hands.setOptions({
       maxNumHands:            2,
       modelComplexity:        1,
-      minDetectionConfidence: 0.55,
-      minTrackingConfidence:  0.5,
+      minDetectionConfidence: 0.50,  // Lowered slightly — we use our own hysteresis
+      minTrackingConfidence:  0.40,  // Lowered — presence manager handles degradation
     });
 
     this.hands.onResults(this.onResults.bind(this));
@@ -50,17 +55,25 @@ export class HandTracker {
     const timestamp = performance.now() / 1000;
 
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      const filtered   = this.filter.filter(results.multiHandLandmarks, timestamp);
+      // DO NOT reset filter on receiving landmarks — preserve continuity
+      const { filtered, velocities } = this.filter.filter(
+        results.multiHandLandmarks,
+        timestamp
+      );
       const handedness = (results.multiHandedness ?? []).map(
         (h: any) => (h.label as string) || 'RIGHT'
       );
+      // Extract per-hand confidence scores
+      const confidences = (results.multiHandedness ?? []).map(
+        (h: any) => (h.score as number) ?? 0.5
+      );
       if (this.onResultsCallback) {
-        this.onResultsCallback(filtered, timestamp, handedness);
+        this.onResultsCallback(filtered, timestamp, handedness, confidences, velocities, results.multiHandLandmarks);
       }
     } else {
-      this.filter.reset();
+      // DO NOT reset filter here — HandPresenceManager handles grace periods
       if (this.onResultsCallback) {
-        this.onResultsCallback([], timestamp, []);
+        this.onResultsCallback([], timestamp, [], [], []);
       }
     }
   }
@@ -131,5 +144,9 @@ export class HandTracker {
       this.camera = null;
     }
     this.filter.reset();
+  }
+
+  public getFilter(): AdaptiveLandmarkFilter {
+    return this.filter;
   }
 }

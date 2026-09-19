@@ -1,6 +1,7 @@
-﻿/**
+/**
  * Debug overlay — toggled with backtick (`) key.
- * Shows gesture state, confidence, velocity, FPS, WebSocket status, and AI intent telemetry.
+ * Shows gesture state, confidence, velocity, FPS, WebSocket status, AI intent telemetry,
+ * and comprehensive hand tracking diagnostics.
  */
 export class DebugOverlay {
   private container: HTMLDivElement;
@@ -8,20 +9,31 @@ export class DebugOverlay {
   private visible: boolean = false;
 
   private readonly FIELD_DEFS: { key: string; label: string }[] = [
-    { key: 'fps',         label: '⚡ Render FPS' },
-    { key: 'trackingFps', label: '📷 Track FPS' },
-    { key: 'hand',        label: '🖐 Hand' },
-    { key: 'gesture',     label: '✋ Local Gesture' },
-    { key: 'confidence',  label: '📊 Local Conf' },
-    { key: 'velocity',    label: '💨 Velocity X' },
-    { key: 'pinch',       label: '🤌 Pinch Dist' },
-    { key: 'activeCard',  label: '🎴 Active Object' },
-    { key: 'socket',      label: '🌐 Socket' },
-    { key: 'zoom',        label: '🔍 Zoom Scale' },
-    { key: 'aiIntent',    label: '🤖 AI Intent' },
-    { key: 'aiConf',      label: '🧠 AI Conf' },
-    { key: 'latency',     label: '⏱ AI Latency' },
-    { key: 'final',       label: '🎯 Final Action' },
+    { key: 'fps',           label: '⚡ Render FPS' },
+    { key: 'trackingFps',   label: '📷 Track FPS' },
+    { key: 'hand',          label: '🖐 Hand' },
+    { key: 'presence',      label: '👁 Presence' },
+    { key: 'trackConf',     label: '📶 Track Conf' },
+    { key: 'palmOpen',      label: '✋ Palm Open' },
+    { key: 'indexExt',      label: '☝ Index Ext' },
+    { key: 'pose',          label: '🤲 Pose' },
+    { key: 'gesture',       label: '✋ Gesture State' },
+    { key: 'confidence',    label: '📊 Local Conf' },
+    { key: 'tapConf',       label: '👆 Tap Conf' },
+    { key: 'tapState',      label: '🎯 Tap State' },
+    { key: 'pinch',         label: '🤌 Pinch Dist' },
+    { key: 'velocity',      label: '💨 Velocity X' },
+    { key: 'velocityY',     label: '💨 Velocity Y' },
+    { key: 'velocityZ',     label: '💨 Velocity Z' },
+    { key: 'activeCard',    label: '🎴 Target' },
+    { key: 'targetLock',    label: '🔒 Lock' },
+    { key: 'socket',        label: '🌐 Socket' },
+    { key: 'zoom',          label: '🔍 Zoom Scale' },
+    { key: 'localIntent',   label: '🧭 Local Intent' },
+    { key: 'aiIntent',      label: '🤖 AI Intent' },
+    { key: 'aiConf',        label: '🧠 AI Conf' },
+    { key: 'latency',       label: '⏱ AI Latency' },
+    { key: 'final',         label: '🎯 Final Action' },
   ];
 
   constructor() {
@@ -34,15 +46,17 @@ export class DebugOverlay {
       color:           '#00ff88',
       padding:         '14px 18px',
       fontFamily:      '"Courier New", Courier, monospace',
-      fontSize:        '11px',
-      lineHeight:      '1.7',
+      fontSize:        '10px',
+      lineHeight:      '1.6',
       pointerEvents:   'none',
       zIndex:          '9999',
       border:          '1px solid rgba(0, 255, 136, 0.35)',
       borderRadius:    '4px',
       backdropFilter:  'blur(8px)',
       display:         'none',
-      minWidth:        '220px',
+      minWidth:        '240px',
+      maxHeight:       '90vh',
+      overflowY:       'auto',
     });
 
     const header = document.createElement('div');
@@ -68,7 +82,7 @@ export class DebugOverlay {
     Object.assign(hint.style, {
       marginTop:  '8px',
       color:      'rgba(0,255,136,0.4)',
-      fontSize:   '10px',
+      fontSize:   '9px',
     });
     this.container.appendChild(hint);
 
@@ -88,9 +102,17 @@ export class DebugOverlay {
     if (!el || !def) return;
     el.textContent = `${def.label}: ${value}`;
 
-    if (key === 'confidence' || key === 'aiConf') {
+    if (key === 'confidence' || key === 'aiConf' || key === 'tapConf' || key === 'trackConf') {
       const v = parseFloat(value as string);
-      el.style.color = v >= 0.82 ? '#00ff88' : v >= 0.6 ? '#ffcc00' : '#ff4444';
+      el.style.color = v >= 0.80 ? '#00ff88' : v >= 0.55 ? '#ffcc00' : '#ff4444';
+    }
+
+    if (key === 'presence') {
+      const s = value as string;
+      el.style.color = s === 'HAND_VISIBLE' ? '#00ff88'
+                     : s === 'HAND_WEAK' ? '#ffcc00'
+                     : s === 'HAND_PREDICTED' ? '#ff8800'
+                     : '#ff4444';
     }
 
     if (key === 'socket') {
@@ -100,6 +122,14 @@ export class DebugOverlay {
     if (key === 'final') {
       el.style.color = value !== 'NONE' && value !== 'IDLE' ? '#00ffff' : '#888888';
       el.style.fontWeight = 'bold';
+    }
+
+    if (key === 'tapState') {
+      el.style.color = value === 'PRESS' || value === 'CONTACT' ? '#ff00ff' : '#00ff88';
+    }
+
+    if (key === 'targetLock') {
+      el.style.color = value === 'LOCKED' ? '#00ff88' : '#888888';
     }
   }
 }
