@@ -75,7 +75,7 @@ const VALID_INTENTS = new Set<string>([
 export class GeminiIntentBridge {
   private socket: SocketClient;
   private lastRequestTime: number = 0;
-  private readonly REQUEST_COOLDOWN_MS = 350;
+  private readonly REQUEST_COOLDOWN_MS = 1200;
   private pendingRequests = new Map<string, { timestamp: number; stateVersion: number }>();
   private onDebugUpdate?: (data: { aiIntent: string; confidence: number; latencyMs: number; final: string }) => void;
 
@@ -89,6 +89,8 @@ export class GeminiIntentBridge {
 
   public requestIntent(context: AIRequestPayload) {
     const now = Date.now();
+    this.expire(now);
+    if(!this.socket.isConnected() || this.pendingRequests.size>0)return;
     if (now - this.lastRequestTime < this.REQUEST_COOLDOWN_MS) return;
     this.lastRequestTime = now;
 
@@ -111,6 +113,12 @@ export class GeminiIntentBridge {
     experiences: ExperienceController,
     currentStateVersion: number
   ) {
+    if(!data || typeof data.requestId!=='string')return;
+    const pending=this.pendingRequests.get(data.requestId);
+    if(!pending)return;
+    this.pendingRequests.delete(data.requestId);
+    if(Date.now()-pending.timestamp>1800 || pending.stateVersion!==currentStateVersion)return;
+    if(typeof data.confidence!=='number'||!Number.isFinite(data.confidence)||data.confidence<0||data.confidence>1)return;
     // 1. Validate intent is in strict allowlist
     if (!VALID_INTENTS.has(data.intent)) {
       console.warn('[GeminiBridge] Untrusted or invalid AI intent rejected:', data.intent);
@@ -187,4 +195,10 @@ export class GeminiIntentBridge {
         break;
     }
   }
+
+  private expire(now=Date.now()) {
+    for(const [id,request]of this.pendingRequests)if(now-request.timestamp>1800)this.pendingRequests.delete(id);
+  }
+  get pendingCount(){this.expire();return this.pendingRequests.size;}
+  cancelPending(){this.pendingRequests.clear();}
 }

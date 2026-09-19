@@ -9,11 +9,17 @@ export class DebugOverlay {
   private visible: boolean = false;
 
   private readonly FIELD_DEFS: { key: string; label: string }[] = [
+    {key:'handCount',label:'Hands'},
+    {key:'rawXY',label:'Raw logical X/Y'},
+    {key:'filteredXY',label:'Filtered X/Y'},
+    {key:'cameraFps',label:'Camera FPS'},
+    {key:'inferenceMs',label:'Inference ms'},
+    {key:'classifyMs',label:'Local pipeline ms'},
     { key: 'fps',           label: '⚡ Render FPS' },
     { key: 'trackingFps',   label: '📷 Track FPS' },
     { key: 'hand',          label: '🖐 Hand' },
     { key: 'presence',      label: '👁 Presence' },
-    { key: 'trackConf',     label: '📶 Track Conf' },
+    { key: 'trackConf',     label: '📶 Observation quality (not model confidence)' },
     { key: 'palmOpen',      label: '✋ Palm Open' },
     { key: 'indexExt',      label: '☝ Index Ext' },
     { key: 'pose',          label: '🤲 Pose' },
@@ -38,6 +44,7 @@ export class DebugOverlay {
 
   constructor() {
     this.container = document.createElement('div');
+    if(!import.meta.env.DEV)return;
     Object.assign(this.container.style, {
       position:        'fixed',
       top:             '12px',

@@ -262,6 +262,7 @@ export const ShaderLibrary = {
       varying vec2 vUv;
       uniform float time;
       uniform float pulse;
+      uniform float opacity;
       uniform vec3  color;
 
       void main() {
@@ -271,7 +272,7 @@ export const ShaderLibrary = {
         float glow = (1.0 - smoothstep(0.30, 0.50, r)) * 0.015;
         float spin = sin(atan(c.y, c.x) * 4.0 + time * 3.0) * 0.5 + 0.5;
         float alpha= ring * (0.6 + spin * 0.4 + pulse * 0.3) + glow;
-        gl_FragColor = vec4(color, alpha * (0.7 + pulse * 0.3));
+        gl_FragColor = vec4(color, alpha * (0.7 + pulse * 0.3) * opacity);
       }
     `,
     uniforms: {

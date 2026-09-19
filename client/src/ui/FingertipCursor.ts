@@ -77,6 +77,7 @@ export class FingertipCursor {
       uniforms: {
         time:  { value: 0 },
         pulse: { value: 0 },
+        opacity: { value: 1 },
         color: { value: new THREE.Color(0x9acbe0) }
       },
       transparent: true,
@@ -211,6 +212,7 @@ export class FingertipCursor {
   }
 
   public show() {
+    this.targetOpacity = 1;
     this.visible_  = true;
     this.group.visible = true;
     this.trail.visible = true;
@@ -231,6 +233,7 @@ export class FingertipCursor {
   }
 
   public update(elapsed: number, dt: number = 0.016) {
+    dt=Math.min(Math.max(dt,0),.033);
     // Fade opacity smoothly
     this.currentOpacity = PhysicsController.lerp(this.currentOpacity, this.targetOpacity, dt * 6);
 
@@ -252,10 +255,11 @@ export class FingertipCursor {
 
     if (timeSinceTracking > 0 && timeSinceTracking < 0.1) {
       // Small velocity prediction for smoother cursor at 60 FPS
-      const predictionFactor = Math.min(timeSinceTracking, 0.04); // cap prediction
-      this.targetX = this.lastTrackingX + this.trackingVelX * predictionFactor;
-      this.targetY = this.lastTrackingY + this.trackingVelY * predictionFactor;
-      this.targetZ = this.lastTrackingZ + this.trackingVelZ * predictionFactor;
+      const predictionFactor = Math.min(timeSinceTracking, 0.016);
+      const bounded=(v:number)=>Math.max(-.08,Math.min(.08,v));
+      this.targetX = this.lastTrackingX + bounded(this.trackingVelX * predictionFactor);
+      this.targetY = this.lastTrackingY + bounded(this.trackingVelY * predictionFactor);
+      this.targetZ = this.lastTrackingZ;
     }
 
     // Spring-smooth cursor position
@@ -273,13 +277,14 @@ export class FingertipCursor {
     const opacityMult = this.currentOpacity;
 
     // Contract cursor when attracted to target
-    const scaleContract = 1 - this.attractionStrength * 0.15;
+    const scaleContract = 1 - this.attractionStrength * 0.12 - this.tapProgress*.2;
 
     // Update ring shader
     const ringMat = this.ring.material as THREE.ShaderMaterial;
     ringMat.uniforms.time.value  = elapsed;
     ringMat.uniforms.pulse.value = this.pulseValue;
     ringMat.opacity = opacityMult;
+    ringMat.uniforms.opacity.value = opacityMult;
     this.ring.scale.setScalar(scaleContract);
 
     // Dot opacity
@@ -291,6 +296,7 @@ export class FingertipCursor {
       // Pulsing effect for predicted state
       const predictPulse = Math.sin(elapsed * 6) * 0.15 + 0.85;
       ringMat.opacity = opacityMult * predictPulse;
+      ringMat.uniforms.opacity.value = opacityMult * predictPulse;
     }
 
     // Decay pulse

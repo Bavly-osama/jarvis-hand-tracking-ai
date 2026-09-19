@@ -9,11 +9,11 @@ interface FilterProfile {
 }
 
 // Palm/wrist landmarks: heavily smoothed for stability
-const PROFILE_STABLE: FilterProfile = { minCutoff: 0.8, beta: 0.003, dCutoff: 1.0 };
+const PROFILE_STABLE: FilterProfile = { minCutoff: 1.5, beta: 8, dCutoff: 2.0 };
 // Finger MCPs: moderate smoothing
-const PROFILE_MODERATE: FilterProfile = { minCutoff: 1.0, beta: 0.005, dCutoff: 1.0 };
+const PROFILE_MODERATE: FilterProfile = { minCutoff: 2.0, beta: 10, dCutoff: 2.0 };
 // Fingertips: responsive for precise interaction
-const PROFILE_RESPONSIVE: FilterProfile = { minCutoff: 1.5, beta: 0.012, dCutoff: 1.0 };
+const PROFILE_RESPONSIVE: FilterProfile = { minCutoff: 3.0, beta: 12, dCutoff: 2.0 };
 
 // Landmark index → profile mapping
 const LANDMARK_PROFILES: FilterProfile[] = [

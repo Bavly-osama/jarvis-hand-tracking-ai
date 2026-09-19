@@ -161,7 +161,8 @@ export class ExperienceController {
   }
   isHoveringBack(x: number, y: number): boolean {
     if (!this.active) return false;
-    const hovering = x < 0.22 && y < 0.20;
+    const rect=this.backButton.getBoundingClientRect();
+    const hovering=x*innerWidth>=rect.left&&x*innerWidth<=rect.right&&y*innerHeight>=rect.top&&y*innerHeight<=rect.bottom;
     if (hovering) {
       this.backButton.classList.add('hover-highlight');
       this.backButton.style.background = '#32607f';
@@ -194,7 +195,8 @@ export class ExperienceController {
     else if(this.name==='Files'&&this.view){const file=this.view.elements[this.selected];file.position.x+=dx;file.position.y-=dy;}
     else if(this.view&&this.name!=='Game'&&this.name!=='Security'){this.view.group.rotation.y+=dx;this.view.group.rotation.x=THREE.MathUtils.clamp(this.view.group.rotation.x+dy,-.6,.6);}
   }
-  zoom(scale:number){if(!Number.isFinite(scale)||(!this.isHome&&!this.active))return;this.zoomValue=THREE.MathUtils.clamp(scale,.6,2);if(this.isHome||this.name==='Earth')this.globe.applyZoom(this.zoomValue);}
+  getZoom(){return this.zoomValue;}
+  zoom(scale:number){if(!Number.isFinite(scale)||(!this.isHome&&!this.active))return;this.zoomValue=THREE.MathUtils.clamp(scale,.7,2.5);if(this.isHome)this.carousel.setHandZoom(this.zoomValue);else if(this.name==='Earth')this.globe.applyZoom(this.zoomValue);}
   private pulse(){if(!this.view)return;this.burstTime=.5;this.view.burst.position.copy(this.aim);this.view.burst.position.z=.15;this.view.burst.visible=true;}
   private processCommand(){
     if(!this.active||this.aiTime>0)return;

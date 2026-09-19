@@ -144,7 +144,7 @@ export class GestureRecognizer {
 
     // Webcam mirror adjustment: In mirrored webcam space, moving physical hand to the right
     // decreases X in camera space. Invert X so positive swipeVelocityX = physical hand moved RIGHT.
-    const swipeVelocityX = -smoothedVel.x;
+    const swipeVelocityX = smoothedVel.x;
     const swipeVelocityY = smoothedVel.y;
     const isSwipeHorizontal = Math.abs(swipeVelocityX) > 1.4 * Math.abs(swipeVelocityY);
 

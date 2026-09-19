@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Landmark } from '../tracking/LandmarkFilter';
 import { HandPresenceState, HAND_CONNECTIONS, PALM_INDICES, LM } from '../tracking/NormalizedHandState';
 import { ShaderLibrary } from '../three/ShaderLibrary';
+import { screenToWorld } from '../tracking/ScreenProjection';
 
 /**
  * Renders a premium holographic hand visualization from MediaPipe landmarks.
@@ -36,7 +37,7 @@ export class HolographicHandRenderer {
   // Constants
   private readonly TIPS = [4, 8, 12, 16, 20];
   
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, private camera: THREE.Camera) {
     this.scene = scene;
     this.group = new THREE.Group();
     this.scene.add(this.group);
@@ -51,6 +52,7 @@ export class HolographicHandRenderer {
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      depthTest: false,
     };
 
     this.boneMaterial = new THREE.LineBasicMaterial({
@@ -116,6 +118,8 @@ export class HolographicHandRenderer {
     const pointsGeo = new THREE.BufferGeometry();
     const pointsPositions = new Float32Array(this.TIPS.length * 3);
     pointsGeo.setAttribute('position', new THREE.BufferAttribute(pointsPositions, 3));
+    pointsGeo.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array(5).fill(.7), 1));
+    pointsGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(5).fill(.05), 1));
     this.fingertipPoints = new THREE.Points(pointsGeo, this.pointMaterial);
     this.group.add(this.fingertipPoints);
 
@@ -147,10 +151,7 @@ export class HolographicHandRenderer {
   }
 
   private toWorldPos(landmark: Landmark, outVector: THREE.Vector3): void {
-    const worldX = (landmark.x - 0.5) * 10;
-    const worldY = -(landmark.y - 0.5) * 7;
-    const worldZ = 5 - landmark.z * 8;
-    outVector.set(worldX, worldY, worldZ);
+    screenToWorld(landmark,this.camera,outVector);
   }
 
   public updateLandmarks(landmarks: Landmark[] | null, presenceState: HandPresenceState, opacity: number): void {
@@ -181,7 +182,7 @@ export class HolographicHandRenderer {
     }
 
     const finalOpacity = stateOpacity * opacity;
-    const pulseFactor = isPulse ? (Math.sin(performance.now() * 0.01) * 0.5 + 0.5) : 1.0;
+    const pulseFactor = isPulse ? .85 : 1.0;
     const currentOpacity = finalOpacity * (isPulse ? pulseFactor : 1.0);
 
     // Update Materials
@@ -192,6 +193,10 @@ export class HolographicHandRenderer {
     }
     this.reticleMaterial.opacity = currentOpacity * 1.3;
     this.palmSurfaceMaterial.opacity = currentOpacity * 0.15;
+    const alpha=this.fingertipPoints.geometry.attributes.alpha as THREE.BufferAttribute;
+    for(let i=0;i<5;i++)alpha.setX(i,currentOpacity);
+    alpha.needsUpdate=true;
+    this.group.traverse(object=>{object.frustumCulled=false;});
 
     // Prepare temp vector
     const tempVec1 = new THREE.Vector3();
@@ -255,8 +260,8 @@ export class HolographicHandRenderer {
     this.toWorldPos(landmarks[LM.INDEX_TIP], tempVec1);
     this.indexReticle.position.copy(tempVec1);
     // Orient reticle slightly to face camera (assuming camera at origin)
-    this.indexReticle.lookAt(this.scene.position);
-    this.indexReticle.visible = presenceState === HandPresenceState.HAND_VISIBLE;
+    this.indexReticle.quaternion.copy(this.camera.quaternion);
+    this.indexReticle.visible = true;
   }
 
   public setDebugMode(raw: Landmark[] | null, filtered: Landmark[] | null, predicted: Landmark[] | null): void {

@@ -10,6 +10,7 @@ export class OneEuroFilter {
   private dCutoff: number;
   private xPrev: number | null = null;
   private dxPrev: number = 0;
+  private rawPrev: number | null = null;
   private tPrev: number = 0;
 
   constructor(minCutoff = 1.0, beta = 0.0, dCutoff = 1.0) {
@@ -26,6 +27,7 @@ export class OneEuroFilter {
   filter(x: number, t: number): number {
     if (this.xPrev === null) {
       this.xPrev = x;
+      this.rawPrev = x;
       this.tPrev = t;
       return x;
     }
@@ -33,7 +35,8 @@ export class OneEuroFilter {
     const dt = t - this.tPrev;
     if (dt <= 0) return x;
 
-    const dx = (x - this.xPrev) / dt;
+    const dx = (x - (this.rawPrev ?? x)) / dt;
+    this.rawPrev = x;
     const edx = this.alpha(this.dCutoff, dt) * dx + (1 - this.alpha(this.dCutoff, dt)) * this.dxPrev;
     
     const cutoff = this.minCutoff + this.beta * Math.abs(edx);
@@ -48,6 +51,7 @@ export class OneEuroFilter {
 
   reset() {
     this.xPrev = null;
+    this.rawPrev = null;
     this.dxPrev = 0;
     this.tPrev = 0;
   }

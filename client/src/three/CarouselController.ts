@@ -25,6 +25,44 @@ export class CarouselController {
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   // Hover
   private hoveredIndex: number = -1;
+  private handDragging=false;
+  private handStartAngle=0;
+  private handOffset=0;
+  private handScale=1;
+  private pressedIndex=-1;
+  private pressProgress=0;
+
+  public beginHandDrag(){
+    if(!this.enabled)return;
+    this.timeline?.kill();this.navigation.completeTransition();this.presentation.anticipation=0;
+    this.handDragging=true;this.handStartAngle=this.carouselAngle;this.handOffset=0;
+  }
+  public dragHand(deltaX:number){
+    if(!this.handDragging||!Number.isFinite(deltaX))return;
+    this.handOffset+=deltaX*3.2;
+    // Rightward displacement reduces angle, moving the visible rail right.
+    const limit=CARD_STEP*1.2;
+    const offset=limit*Math.tanh(this.handOffset/limit);
+    this.carouselAngle=this.handStartAngle-offset;
+  }
+  public endHandDrag(velocityX:number){
+    if(!this.handDragging)return;
+    this.handDragging=false;
+    const momentum=THREE.MathUtils.clamp(velocityX*.035,-CARD_STEP*.15,CARD_STEP*.15);
+    const slot=Math.round((this.carouselAngle-momentum)/CARD_STEP);
+    const target=slot*CARD_STEP;
+    this.navigation.index=((slot%NUM_CARDS)+NUM_CARDS)%NUM_CARDS;
+    this.navigation.isAnimating=true;
+    this.timeline?.kill();this.timeline=gsap.timeline({onComplete:()=>this.navigation.completeTransition()})
+      .to(this,{carouselAngle:target,duration:.22,ease:'power2.out'});
+  }
+  public focusForOpen(index:number){
+    if(!this.enabled||index<0||index>=NUM_CARDS)return;
+    this.timeline?.kill();this.handDragging=false;this.navigation.index=index;this.navigation.completeTransition();
+    this.carouselAngle=index*CARD_STEP;
+  }
+  public setHandZoom(scale:number){this.handScale=scale;}
+  public setHandPress(target:string|null,progress:number){this.pressedIndex=target?.startsWith('card-')?Number(target.slice(5)):-1;this.pressProgress=progress;}
 
   constructor() {
     this.group = new THREE.Group();
@@ -115,9 +153,9 @@ export class CarouselController {
 
       // Active card: push forward, full scale
       const isActive = i === activeIndex;
-      const targetZ = isActive ? z + 0.32 + opening * 1.6 : z - opening * 4;
+      const targetZ = (isActive ? z + 0.32 + opening * 1.6 : z - opening * 4) - (i===this.pressedIndex?this.pressProgress*.1:0);
       const targetScl = isActive
-        ? 1.14 * (1 + opening * 2.0)
+        ? 1.14 * (1 + opening * 2.0) * this.handScale
         : PhysicsController.remap(depth, 0, 1, 0.68, 0.94);
 
       // Smooth position / scale

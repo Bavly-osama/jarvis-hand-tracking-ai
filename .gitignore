@@ -33,3 +33,8 @@ Thumbs.db
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Local browser QA runtime and generated evidence
+.qa-*/
+client/tests/*.png
+client/tests/qa-results*.json

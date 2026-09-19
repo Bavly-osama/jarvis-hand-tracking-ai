@@ -1,146 +1,35 @@
-import { Landmark } from '../tracking/LandmarkFilter';
-import { AirTapEvent } from '../tracking/NormalizedHandState';
-import { HandMotionHistory } from '../tracking/HandMotionHistory';
-
+export interface TapSample {
+  timestamp:number;target:string|null;pointing:boolean;palmSize:number;
+  depth:number;curl:number;projectedLength:number;palmSpeed:number;
+}
+/** Secondary selection gesture: depth alone can never trigger an action. */
 export class AirTapRecognizer {
-  private state: 'IDLE' | 'READY' | 'PRESS' | 'CONTACT' | 'RELEASE' | 'COOLDOWN' = 'IDLE';
-  private tapId: number = 0;
-  private tapConsumed: boolean = false;
-  private releaseRequired: boolean = false;
-  private stateEnterTime: number = 0;
-  private lastZ: number | null = null;
-  private initialZ: number | null = null;
-  
-  private confidence: number = 0;
-  private progress: number = 0;
-  
-  update(
-    indexTip: Landmark,
-    indexDip: Landmark,
-    indexMcp: Landmark,
-    wrist: Landmark,
-    palmCenter: Landmark,
-    velocity: { x: number, y: number, z: number },
-    fingerCurl: number,
-    isIndexExtended: boolean,
-    targetId: string | null,
-    history: HandMotionHistory,
-    nowMs: number
-  ): { state: string; confidence: number; event: AirTapEvent | null; progress: number } {
-    
-    let event: AirTapEvent | null = null;
-    let depthMotion = 0;
-    
-    if (this.lastZ === null) {
-      this.lastZ = indexTip.z;
-    }
-    const dz = indexTip.z - this.lastZ;
-    this.lastZ = indexTip.z;
-
-    const timeInState = nowMs - this.stateEnterTime;
-
-    switch (this.state) {
-      case 'IDLE':
-        if (isIndexExtended && targetId !== null) {
-          this.transition('READY', nowMs);
-          this.initialZ = indexTip.z;
-        }
-        break;
-
-      case 'READY':
-        if (!isIndexExtended || targetId === null) {
-          this.transition('IDLE', nowMs);
-        } else if (timeInState > 150) {
-          if (velocity.z < -0.05 || fingerCurl > 0.1) {
-             this.transition('PRESS', nowMs);
-          }
-        }
-        break;
-
-      case 'PRESS':
-        if (!isIndexExtended) {
-          this.transition('IDLE', nowMs);
-        } else {
-          const zDisplacement = this.initialZ !== null ? this.initialZ - indexTip.z : 0;
-          this.progress = Math.min(1.0, Math.max(0, zDisplacement / 0.05));
-          depthMotion = Math.min(1.0, Math.max(0, zDisplacement / 0.04));
-          
-          if (zDisplacement > 0.04 || fingerCurl > 0.3) {
-            this.transition('CONTACT', nowMs);
-            if (!this.tapConsumed && !this.releaseRequired) {
-              this.tapId++;
-              const temporalPattern = 1.0;
-              const targetStability = targetId ? 1.0 : 0.0;
-              const fingerPose = isIndexExtended ? 1.0 : 0.0;
-              const velocityPattern = Math.min(1, Math.abs(velocity.z) * 5);
-              this.confidence = 0.30 * depthMotion + 0.25 * temporalPattern + 0.20 * targetStability + 0.15 * fingerPose + 0.10 * velocityPattern;
-
-              event = {
-                tapId: `tap_${this.tapId}`,
-                targetId: targetId || '',
-                timestamp: nowMs,
-                position: { x: indexTip.x, y: indexTip.y },
-                confidence: this.confidence,
-              };
-              this.tapConsumed = true;
-              this.releaseRequired = true;
-            }
-          }
-        }
-        break;
-
-      case 'CONTACT':
-        if (dz > 0.02 || fingerCurl < 0.2 || timeInState > 300) {
-          this.transition('RELEASE', nowMs);
-        }
-        break;
-
-      case 'RELEASE':
-        this.progress = 0;
-        this.transition('COOLDOWN', nowMs);
-        break;
-
-      case 'COOLDOWN':
-        if (timeInState > 300) {
-          this.releaseRequired = false;
-          this.tapConsumed = false;
-          this.transition('IDLE', nowMs);
-        }
-        break;
-    }
-    
-    let temporalPattern = 1.0;
-    let targetStability = targetId ? 1.0 : 0.0;
-    let fingerPose = isIndexExtended ? 1.0 : 0.0;
-    let velocityPattern = Math.min(1, Math.abs(velocity.z) * 5);
-    
-    this.confidence = 0.30 * depthMotion + 0.25 * temporalPattern + 0.20 * targetStability + 0.15 * fingerPose + 0.10 * velocityPattern;
-    
-    return {
-      state: this.state,
-      confidence: this.confidence,
-      event,
-      progress: this.progress
-    };
-  }
-  
-  private transition(newState: 'IDLE' | 'READY' | 'PRESS' | 'CONTACT' | 'RELEASE' | 'COOLDOWN', nowMs: number) {
-    this.state = newState;
-    this.stateEnterTime = nowMs;
-  }
-  
-  reset(): void {
-    this.state = 'IDLE';
-    this.tapId = 0;
-    this.tapConsumed = false;
-    this.releaseRequired = false;
-    this.lastZ = null;
-    this.initialZ = null;
-    this.confidence = 0;
-    this.progress = 0;
-  }
-  
-  getState(): string {
-    return this.state;
+  private state:'IDLE'|'READY'|'PRESS'|'CONTACT'|'RELEASE'='IDLE';
+  private baseline:TapSample|null=null;
+  private started=0;
+  private peak=0;
+  private id=0;
+  reset(){this.state='IDLE';this.baseline=null;this.peak=0;}
+  sample(s:TapSample){
+    let event=false,progress=0,confidence=0;
+    if(!s.target||!s.pointing||s.palmSpeed>.45||(this.baseline&&s.target!==this.baseline.target)){this.reset();return {state:this.state,event,progress,confidence,tapId:this.id};}
+    if(!this.baseline){this.baseline={...s};this.started=s.timestamp;this.state='READY';}
+    const b=this.baseline,age=s.timestamp-this.started;
+    const depth=(b.depth-s.depth)/Math.max(.04,s.palmSize);
+    const curl=Math.max(0,s.curl-b.curl);
+    const geometry=Math.max(0,(b.projectedLength-s.projectedLength)/Math.max(.04,s.palmSize));
+    const shape=Math.max(curl/.28,geometry/.15);
+    confidence=.3*Math.min(1,depth/.2)+.25*(age>=150?1:0)+.2+.15*Math.min(1,shape)+.1*(s.palmSpeed<.25?1:0);
+    if(this.state==='READY'&&age>=150&&depth>.035&&shape>.15){this.state='PRESS';this.started=s.timestamp;}
+    if(this.state==='PRESS'){
+      progress=Math.max(0,Math.min(1,depth/.2));
+      if(depth>.16&&shape>.65&&confidence>=.8){this.state='CONTACT';this.peak=depth;}
+      else if(age>900)this.reset();
+    }else if(this.state==='CONTACT'){
+      this.peak=Math.max(this.peak,depth);progress=1;
+      if(this.peak-depth>.08&&depth<.12&&shape<.65){event=true;this.id++;this.state='RELEASE';this.started=s.timestamp;}
+      else if(age>900)this.reset();
+    }else if(this.state==='RELEASE'&&age>250&&Math.abs(depth)<.04&&shape<.2){this.reset();}
+    return {state:this.state,event,progress,confidence,tapId:this.id};
   }
 }

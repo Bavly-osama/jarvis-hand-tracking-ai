@@ -1,152 +1,87 @@
-import { AdaptiveLandmarkFilter } from './AdaptiveLandmarkFilter';
-import { Landmark } from './LandmarkFilter';
+import type { HandFrame } from '../interaction/HandInteractionEngine';
+declare const Hands:any;
 
-export type HandTrackerCallback = (
-  landmarks: Landmark[][],
-  timestamp: number,
-  handedness: string[],
-  confidences: number[],
-  velocities: { x: number; y: number; z: number }[][],
-  rawLandmarks?: Landmark[][]
-) => void;
-
-declare const Hands: any;
-declare const Camera: any;
-
+/** Acquisition/inference only. Filtering and intent belong to HandInteractionEngine. */
 export class HandTracker {
-  private hands: any;
-  private camera: any = null;
-  private filter: AdaptiveLandmarkFilter;
-  private onResultsCallback: HandTrackerCallback | null = null;
-  private isRunning: boolean = false;
-  private lastFrameId: number = -1;
-
-  constructor() {
-    this.filter = new AdaptiveLandmarkFilter(2, 21);
-
-    if (typeof Hands === 'undefined') {
-      console.warn(
-        '[HandTracker] MediaPipe Hands not found on window. Ensure CDN script is loaded.'
-      );
-      return;
-    }
-
-    this.hands = new Hands({
-      locateFile: (file: string) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`,
-    });
-
-    this.hands.setOptions({
-      maxNumHands:            2,
-      modelComplexity:        1,
-      minDetectionConfidence: 0.50,  // Lowered slightly — we use our own hysteresis
-      minTrackingConfidence:  0.40,  // Lowered — presence manager handles degradation
-    });
-
-    this.hands.onResults(this.onResults.bind(this));
-  }
-
-  public onUpdate(callback: HandTrackerCallback) {
-    this.onResultsCallback = callback;
-  }
-
-  private onResults(results: any) {
-    if (!this.isRunning) return;
-    const timestamp = performance.now() / 1000;
-
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      // DO NOT reset filter on receiving landmarks — preserve continuity
-      const { filtered, velocities } = this.filter.filter(
-        results.multiHandLandmarks,
-        timestamp
-      );
-      const handedness = (results.multiHandedness ?? []).map(
-        (h: any) => (h.label as string) || 'RIGHT'
-      );
-      // Extract per-hand confidence scores
-      const confidences = (results.multiHandedness ?? []).map(
-        (h: any) => (h.score as number) ?? 0.5
-      );
-      if (this.onResultsCallback) {
-        this.onResultsCallback(filtered, timestamp, handedness, confidences, velocities, results.multiHandLandmarks);
-      }
-    } else {
-      // DO NOT reset filter here — HandPresenceManager handles grace periods
-      if (this.onResultsCallback) {
-        this.onResultsCallback([], timestamp, [], [], []);
-      }
-    }
-  }
-
-  public async start(videoElement: HTMLVideoElement): Promise<void> {
-    if (!this.hands) throw new Error('MediaPipe Hands not initialized');
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('CAMERA_NOT_SUPPORTED');
-    }
-
-    let stream: MediaStream | null = null;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        }
-      });
-      stream.getTracks().forEach(track => track.stop());
-    } catch (err: any) {
-      console.warn('[HandTracker] Camera access check failed:', err.name, err.message);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        throw new Error('CAMERA_DENIED');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        throw new Error('CAMERA_NOT_FOUND');
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        throw new Error('CAMERA_BUSY');
-      }
-      throw err;
-    }
-
-    return new Promise((resolve, reject) => {
-      try {
-        this.camera = new Camera(videoElement, {
-          onFrame: async () => {
-            if (this.hands && this.isRunning) {
-              await this.hands.send({ image: videoElement });
-            }
-          },
-          width:  640,
-          height: 480,
-        });
-
-        this.camera.start()
-          .then(() => {
-            this.isRunning = true;
-            resolve();
-          })
-          .catch((err: any) => {
-            this.isRunning = false;
-            reject(err);
-          });
-      } catch (e) {
-        this.isRunning = false;
-        reject(e);
-      }
+  private hands:any;
+  private callback:((frame:HandFrame)=>void)|null=null;
+  private running=false;
+  private generation=0;
+  private sentGeneration=0;
+  private stream:MediaStream|null=null;
+  private video:HTMLVideoElement|null=null;
+  private handle=0;
+  private usingVideoCallback=false;
+  private previousVideoTime=-1;
+  private inference:Promise<void>|null=null;
+  private inferenceStart=0;
+  private metricStart=0;
+  private cameraFrames=0;
+  private trackingFrames=0;
+  private cameraPresented=0;
+  readonly metrics={cameraFPS:0,trackingFPS:0,inferenceMs:0,cameraFrameMs:0};
+  constructor(){
+    if(typeof Hands==='undefined')return;
+    this.hands=new Hands({locateFile:(file:string)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`});
+    this.hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.5,minTrackingConfidence:.5});
+    this.hands.onResults((results:any)=>{
+      if(!this.running||this.sentGeneration!==this.generation)return;
+      const now=performance.now();this.metrics.inferenceMs=now-this.inferenceStart;this.trackingFrames++;
+      const landmarks=results.multiHandLandmarks??[];
+      this.callback?.({timestamp:now,space:'camera',hands:landmarks.map((landmarks:any,i:number)=>({
+        landmarks,handedness:results.multiHandedness?.[i]?.label??'UNKNOWN',
+        // Legacy Hands exposes no per-frame tracking probability. Omit quality:
+        // the engine validates geometry and temporal continuity; handedness.score is NOT quality.
+      }))});
     });
   }
-
-  public stop() {
-    this.isRunning = false;
-    if (this.camera) {
-      try {
-        this.camera.stop();
-      } catch {}
-      this.camera = null;
+  onUpdate(callback:(frame:HandFrame)=>void){this.callback=callback;}
+  async start(video:HTMLVideoElement){
+    this.stop();const generation=this.generation;
+    if(!this.hands)throw new Error('MediaPipe Hands not initialized');
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('CAMERA_NOT_SUPPORTED');
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},frameRate:{ideal:30},facingMode:'user'},audio:false});
+      if(generation!==this.generation){stream.getTracks().forEach(t=>t.stop());return;}
+      this.stream=stream;this.video=video;video.srcObject=stream;
+      await video.play();if(this.inference)await this.inference;
+      if(generation!==this.generation)return;
+      this.running=true;this.metricStart=performance.now();this.previousVideoTime=-1;
+      stream.getVideoTracks()[0].addEventListener('ended',()=>{if(generation===this.generation)this.stop();},{once:true});
+      this.schedule(generation);
+    }catch(error:any){
+      if(generation!==this.generation)return;
+      this.stop();
+      const mapped:Record<string,string>={NotAllowedError:'CAMERA_DENIED',NotFoundError:'CAMERA_NOT_FOUND',NotReadableError:'CAMERA_BUSY'};
+      throw new Error(mapped[error.name]??error.message);
     }
-    this.filter.reset();
   }
-
-  public getFilter(): AdaptiveLandmarkFilter {
-    return this.filter;
+  private schedule(generation:number){
+    if(!this.running||generation!==this.generation||!this.video)return;
+    const video=this.video;
+    const run=async(_now:number,metadata?:{presentedFrames:number})=>{
+      if(!this.running||generation!==this.generation)return;
+      if(metadata){this.cameraFrames+=this.cameraPresented?Math.max(1,metadata.presentedFrames-this.cameraPresented):1;this.cameraPresented=metadata.presentedFrames;}
+      if(video.readyState>=2 && video.currentTime!==this.previousVideoTime){
+        this.previousVideoTime=video.currentTime;if(!metadata)this.cameraFrames++;
+        this.inferenceStart=performance.now();this.sentGeneration=generation;
+        try{this.inference=this.hands.send({image:video});await this.inference;}
+        catch{if(generation===this.generation)this.callback?.({timestamp:performance.now(),space:'camera',hands:[]});}
+        finally{this.inference=null;}
+      }
+      const now=performance.now(),seconds=(now-this.metricStart)/1000;
+      if(seconds>=1){this.metrics.cameraFPS=this.cameraFrames/seconds;this.metrics.trackingFPS=this.trackingFrames/seconds;this.metrics.cameraFrameMs=this.metrics.cameraFPS?1000/this.metrics.cameraFPS:0;this.metricStart=now;this.cameraFrames=this.trackingFrames=0;}
+      this.schedule(generation);
+    };
+    this.usingVideoCallback='requestVideoFrameCallback' in video;
+    this.handle=this.usingVideoCallback?(video as any).requestVideoFrameCallback(run):requestAnimationFrame(run);
+  }
+  stop(){
+    this.running=false;this.generation++;
+    if(this.video&&this.usingVideoCallback)(this.video as any).cancelVideoFrameCallback(this.handle);else cancelAnimationFrame(this.handle);
+    this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;
+    if(this.video)this.video.srcObject=null;
+    this.video=null;this.cameraFrames=this.trackingFrames=this.cameraPresented=0;
+    this.metrics.cameraFPS=this.metrics.trackingFPS=0;
   }
 }
