@@ -18,7 +18,22 @@ function getApp(): Promise<FastifyInstance> {
   return appPromise;
 }
 
+/** Rebuild /api/... so Fastify matches registered routes. */
+function restoreApiUrl(req: VercelRequest): void {
+  const parts = req.query.path;
+  const suffix = Array.isArray(parts)
+    ? parts.filter(Boolean).join('/')
+    : typeof parts === 'string'
+      ? parts
+      : '';
+
+  const searchIdx = req.url?.indexOf('?') ?? -1;
+  const search = searchIdx >= 0 ? req.url!.slice(searchIdx) : '';
+  req.url = (suffix ? `/api/${suffix}` : '/api') + search;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  restoreApiUrl(req);
   const app = await getApp();
   app.server.emit('request', req, res);
 }

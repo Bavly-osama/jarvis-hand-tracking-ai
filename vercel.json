@@ -4,7 +4,7 @@
   "outputDirectory": "client/dist",
   "framework": "vite",
   "functions": {
-    "api/[[...path]].ts": {
+    "api/[...path].ts": {
       "includeFiles": "server/src/**",
       "memory": 1024,
       "maxDuration": 30
