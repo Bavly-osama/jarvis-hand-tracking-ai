@@ -51,13 +51,13 @@ export class HandSceneController {
     const meshes=this.carousel.getCardMeshes().filter(m=>m.parent?.visible && m.parent.position.z>0);
     const hit=this.raycaster.intersectObjects(meshes,false)[0];
     if(hit)return 'card-'+this.carousel.getCardMeshes().indexOf(hit.object);
-    let best:string|null=null,bestZ=Infinity;
+    let best:string|null=null,bestZ=-Infinity;
     const all=this.carousel.getCardMeshes();
     for(const mesh of meshes){
       const box=this.projectMeshBox(mesh as THREE.Mesh);
       if(!pointInPaddedBox(this.ndc.x,this.ndc.y,box))continue;
       const z=mesh.parent?.position.z??0;
-      if(z<bestZ){bestZ=z;best='card-'+all.indexOf(mesh);}
+      if(z>bestZ){bestZ=z;best='card-'+all.indexOf(mesh);}
     }
     return best;
   };
@@ -75,21 +75,30 @@ export class HandSceneController {
     }
     return {minX,maxX,minY,maxY};
   }
+  private drivePointer(frame:HandFrame,r:ReturnType<HandInteractionEngine['process']>){
+    if(!this.handPointer)return;
+    // Prefer engine logical tip (same space as hitTest). Fall back to raw camera or presence hold.
+    if(r.pointer){
+      this.handPointer.setLogicalTarget(r.pointer.x,r.pointer.y,frame.timestamp);
+    }else if(r.presence?.landmarks?.[8]){
+      this.handPointer.setLogicalTarget(r.presence.landmarks[8].x,r.presence.landmarks[8].y,frame.timestamp);
+    }else{
+      const detected=frame.hands.find(h=>h.landmarks?.length===21);
+      if(detected){
+        const tip=detected.landmarks[8];
+        const mapped=this.handPointer.mapFromCamera(tip.x,tip.y,frame);
+        this.handPointer.setTarget(mapped.screenX,mapped.screenY,frame.timestamp);
+      }
+    }
+    if(r.state==='DRAG'||r.mode==='ZOOM')this.handPointer.setInteractionState('GRAB');
+    else if(r.pinchState==='PINCHED'||r.state.startsWith('PINCH'))this.handPointer.setInteractionState('PRESS');
+    else if(r.target)this.handPointer.setInteractionState('HOVER');
+    else if(r.pointer||r.presence?.landmarks)this.handPointer.setInteractionState('TRACKING');
+  }
   process(frame:HandFrame){
-    const detected=frame.hands.find(h=>h.landmarks?.length===21);
-    if(detected&&this.handPointer){
-      const tip=detected.landmarks[8];
-      const mapped=this.handPointer.mapFromCamera(tip.x,tip.y,frame);
-      this.handPointer.setTarget(mapped.screenX,mapped.screenY,frame.timestamp);
-    }else this.handPointer?.tick(frame.timestamp);
     const r=this.engine.process(frame,this.hitTest,{id:this.experiences.state.state+':'+this.experiences.name,home:this.experiences.isHome,scale:this.experiences.getZoom()});
     this.lastFrame=performance.now();this.result=r;
-    if(this.handPointer&&detected){
-      if(r.state==='DRAG'||r.mode==='ZOOM')this.handPointer.setInteractionState('GRAB');
-      else if(r.pinchState==='PINCHED'||r.state.startsWith('PINCH'))this.handPointer.setInteractionState('PRESS');
-      else if(r.target)this.handPointer.setInteractionState('HOVER');
-      else this.handPointer.setInteractionState('TRACKING');
-    }
+    this.drivePointer(frame,r);
     if(this.drive3dCursor&&r.pointer){this.experiences.pointer(r.pointer.x,r.pointer.y);screenToWorld(r.pointer,this.scene.camera,this.vector);this.cursor.updatePosition(this.vector.x,this.vector.y,this.vector.z);}
     else if(r.pointer)this.experiences.pointer(r.pointer.x,r.pointer.y);
     this.cursor.setAttractionStrength(r.target||r.capturedTarget?1:0);this.cursor.setTapProgress(r.progress);
@@ -115,9 +124,12 @@ export class HandSceneController {
     return r;
   }
   render(now:number){
-    if(now-this.lastFrame>180 && this.engine.state!=='IDLE' && this.engine.state!=='RECOVERING_TRACKING')this.process({hands:[],timestamp:now,space:'logical'});
+    if(now-this.lastFrame>220 && this.engine.state!=='IDLE' && this.engine.state!=='RECOVERING_TRACKING')this.process({hands:[],timestamp:now,space:'logical'});
     this.handPointer?.tick(now);
     const presence=this.engine.presence.sample(now);
+    if(presence.landmarks?.[8] && this.handPointer && !this.handPointer.visible){
+      this.handPointer.setLogicalTarget(presence.landmarks[8].x,presence.landmarks[8].y,now);
+    }
     if(this.drive3dCursor)this.cursor.setPresenceState(presence.state,presence.opacity);
     else this.cursor.hide();
     return presence;

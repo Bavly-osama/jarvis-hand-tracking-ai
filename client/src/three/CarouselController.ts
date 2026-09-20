@@ -41,16 +41,16 @@ export class CarouselController {
   public dragHand(deltaX:number){
     if(!this.handDragging||!Number.isFinite(deltaX))return;
     this.handOffset+=deltaX;
-    // Rightward displacement reduces angle, moving the visible rail right.
     const limit=CARD_STEP*1.2;
     const offset=limit*Math.tanh(this.handOffset/limit);
-    this.carouselAngle=this.handStartAngle-offset;
+    // Invert vs prior sign: hand-right must move the rail right on mirrored webcam.
+    this.carouselAngle=this.handStartAngle+offset;
   }
   public endHandDrag(velocityX:number){
     if(!this.handDragging)return;
     this.handDragging=false;
     const momentum=THREE.MathUtils.clamp(velocityX*.035,-CARD_STEP*.15,CARD_STEP*.15);
-    const slot=Math.round((this.carouselAngle-momentum)/CARD_STEP);
+    const slot=Math.round((this.carouselAngle+momentum)/CARD_STEP);
     const target=slot*CARD_STEP;
     this.navigation.index=((slot%NUM_CARDS)+NUM_CARDS)%NUM_CARDS;
     this.navigation.isAnimating=true;

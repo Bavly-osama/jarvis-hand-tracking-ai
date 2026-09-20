@@ -2,8 +2,9 @@ import { cameraToScreenCoordinates, type CameraSpace, type CameraFrameSize } fro
 
 export type PointerVisualState = 'TRACKING' | 'HOVER' | 'PRESS' | 'GRAB' | 'WEAK' | 'LOST';
 
-export const POINTER_HOLD_MS = 150;
-export const POINTER_FADE_MS = 350;
+/** Hold last tip through brief MediaPipe gaps; fade only after sustained loss. */
+export const POINTER_HOLD_MS = 420;
+export const POINTER_FADE_MS = 1100;
 
 export type StageRect = { left: number; top: number; width: number; height: number };
 
@@ -92,6 +93,12 @@ export class HandPointer {
     return this.rect;
   }
 
+  /** Logical 0–1 tip already mirrored — do not mirror again. */
+  setLogicalTarget(nx: number, ny: number, timestamp: number) {
+    this.refreshRect();
+    this.setTarget(this.rect.left + nx * this.rect.width, this.rect.top + ny * this.rect.height, timestamp);
+  }
+
   mapFromCamera(nx: number, ny: number, frame: { space?: CameraSpace; video?: CameraFrameSize } = {}) {
     this.refreshRect();
     return mapIndexTipToScreen(nx, ny, { space: frame.space, video: frame.video, stageRect: this.rect });
@@ -140,8 +147,8 @@ export class HandPointer {
     }
     if (age > POINTER_HOLD_MS) {
       this.state = 'WEAK';
-      this.opacity = 1 - (age - POINTER_HOLD_MS) / (POINTER_FADE_MS - POINTER_HOLD_MS);
-      this.visible = this.opacity > 0.02;
+      this.opacity = Math.max(0.15, 1 - (age - POINTER_HOLD_MS) / (POINTER_FADE_MS - POINTER_HOLD_MS));
+      this.visible = true;
     } else {
       this.state = this.interaction;
       this.opacity = 1;
@@ -153,10 +160,10 @@ export class HandPointer {
     const dist = Math.hypot(dx, dy);
     const speed = dist / dt;
     const t = Math.min(1, Math.max(0, (speed - 0.45) / 14));
-    let factor = 0.18 + t * (0.72 - 0.18);
-    if (speed < 1) factor = Math.min(factor, 0.25);
-    if (speed > 8) factor = Math.max(factor, 0.5);
-    factor = Math.min(0.72, Math.max(0.18, factor));
+    let factor = 0.22 + t * (0.78 - 0.22);
+    if (speed < 1) factor = Math.min(factor, 0.28);
+    if (speed > 8) factor = Math.max(factor, 0.55);
+    factor = Math.min(0.78, Math.max(0.22, factor));
     this.currentX += dx * factor;
     this.currentY += dy * factor;
     this.x = this.currentX;
@@ -168,7 +175,7 @@ export class HandPointer {
     this.element.style.opacity = String(this.visible ? this.opacity : 0);
     this.element.style.transform = `translate3d(${this.currentX}px,${this.currentY}px,0) translate(-50%,-50%)`;
     this.element.className = `state-${this.state.toLowerCase()}${this.visible ? ' is-visible' : ''}`;
-    this.label.textContent = this.visible ? this.state : '';
+    this.label.textContent = '';
   }
 
   dispose() {

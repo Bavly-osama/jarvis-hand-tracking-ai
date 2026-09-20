@@ -100,8 +100,8 @@ with sync_playwright() as p:
       check('pointer appears without pinch',!!shown && snap.pointerVisible && pointer && parseFloat(getComputedStyle(pointer).opacity)>0 && snap.pointerState!=='LOST',{state:snap.pointerState,opacity:pointer&&getComputedStyle(pointer).opacity,xy:snap.pointerXY});
       await wait(70);
       check('pointer holds brief loss',api.snapshot().pointerVisible,api.snapshot().pointerState);
-      await wait(420);
-      check('pointer hides after 400ms',!api.snapshot().pointerVisible,{state:api.snapshot().pointerState});
+      await wait(1200);
+      check('pointer hides after sustained loss',!api.snapshot().pointerVisible,{state:api.snapshot().pointerState});
 
       return report;
     }''')

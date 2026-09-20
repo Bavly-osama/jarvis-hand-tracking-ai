@@ -60,13 +60,13 @@ export class HolographicHandRenderer {
 
     this.boneMaterial = new THREE.LineBasicMaterial({
       color: this.baseColor,
-      opacity: 0.7,
+      opacity: 0.45,
       ...commonProps
     });
 
     this.palmLineMaterial = new THREE.LineBasicMaterial({
       color: 0xaaeeff,
-      opacity: 0.8,
+      opacity: 0.4,
       ...commonProps
     });
 
@@ -122,14 +122,15 @@ export class HolographicHandRenderer {
     const pointsPositions = new Float32Array(this.TIPS.length * 3);
     pointsGeo.setAttribute('position', new THREE.BufferAttribute(pointsPositions, 3));
     pointsGeo.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array(5).fill(.7), 1));
-    pointsGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(5).fill(.05), 1));
+    pointsGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(5).fill(.022), 1));
     this.fingertipPoints = new THREE.Points(pointsGeo, this.pointMaterial);
     this.group.add(this.fingertipPoints);
 
-    // Index Reticle
-    const reticleGeo = new THREE.RingGeometry(0.15, 0.2, 32);
+    // Index Reticle — small tip indicator, not a large halo
+    const reticleGeo = new THREE.RingGeometry(0.035, 0.048, 24);
     this.indexReticle = new THREE.Mesh(reticleGeo, this.reticleMaterial);
     this.group.add(this.indexReticle);
+    this.group.scale.setScalar(0.62);
   }
 
   private setupDebugVisuals(): void {
@@ -138,7 +139,7 @@ export class HolographicHandRenderer {
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(21 * 3), 3));
       const mat = new THREE.PointsMaterial({
         color: colorHex,
-        size: 0.2,
+        size: 0.08,
         depthWrite: false,
         transparent: true
       });

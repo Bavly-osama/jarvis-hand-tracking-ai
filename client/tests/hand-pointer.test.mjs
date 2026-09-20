@@ -54,7 +54,7 @@ test('pointer shows when a hand exists with no pinch, hover, or Gemini',()=>{
   p.dispose();
 });
 
-test('missing two frames keeps the pointer visible; missing 400ms hides it',()=>{
+test('missing two frames keeps the pointer visible; missing 400ms still holds; missing 1.2s hides it',()=>{
   const p=pointer();
   p.setTarget(400,300,1000);
   p.tick(1000,16);
@@ -62,7 +62,9 @@ test('missing two frames keeps the pointer visible; missing 400ms hides it',()=>
   p.tick(1066,16);
   assert.equal(p.visible,true,'must hold through two missed tracking frames');
   p.tick(1400,16);
-  assert.equal(p.visible,false,'must hide after 400ms without a target');
+  assert.equal(p.visible,true,'must still hold at 400ms (grace)');
+  p.tick(2300,16);
+  assert.equal(p.visible,false,'must hide after sustained loss');
   assert.equal(p.state,'LOST');
   p.dispose();
 });
