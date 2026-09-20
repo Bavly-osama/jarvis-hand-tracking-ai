@@ -53,7 +53,10 @@ export class HandTracker {
   onUpdate(callback:(frame:HandFrame)=>void){this.callback=callback;}
   async start(video:HTMLVideoElement){
     this.stop();const generation=this.generation;
-    if(!this.hands)throw new Error('MediaPipe Hands not initialized');
+    if(typeof window!=='undefined' && !window.isSecureContext && location.hostname!=='localhost' && location.hostname!=='127.0.0.1'){
+      throw new Error('INSECURE_CONTEXT');
+    }
+    if(!this.hands)throw new Error('MEDIAPIPE_MISSING');
     if(!navigator.mediaDevices?.getUserMedia)throw new Error('CAMERA_NOT_SUPPORTED');
     try{
       const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:this.captureWidth},height:{ideal:this.captureHeight},frameRate:{ideal:this.trackingFps},facingMode:'user'},audio:false});

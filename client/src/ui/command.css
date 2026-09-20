@@ -18,6 +18,21 @@
 #hand-pointer.state-press .hand-pointer-ring,#hand-pointer.state-grab .hand-pointer-ring{transform:scale(.65);border-color:#fff}
 #hand-pointer.state-weak{opacity:.55}
 .hand-pointer-state{display:none}
+#aim-pop-overlay{position:fixed;inset:0;z-index:4200;display:none;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,rgba(8,28,44,.55),rgba(2,8,16,.72))}
+#aim-pop-overlay.is-visible{display:block}
+.aim-pop-hud{position:absolute;top:88px;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;width:min(520px,92%)}
+.aim-pop-title{font:500 28px 'Barlow Condensed',sans-serif;letter-spacing:6px;color:#d5e8f2}
+.aim-pop-stats{display:flex;justify-content:center;gap:18px;margin-top:10px;font:10px 'IBM Plex Mono',monospace;letter-spacing:1.5px;color:#8fb3c6}
+.aim-pop-hand{color:#6f8c9f}.aim-pop-hand.ok{color:#6dffb0}
+.aim-pop-hint{margin-top:12px;font:10px/1.6 'IBM Plex Mono',monospace;color:#7d97a8}
+.aim-pop-stage{position:absolute;inset:0;pointer-events:none}
+.aim-pop-target{position:absolute;border:2px solid rgba(126,220,255,.9);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 18px rgba(80,200,255,.35),inset 0 0 12px rgba(80,200,255,.15);background:rgba(40,120,160,.12)}
+.aim-pop-target.pop{border-color:#fff;opacity:0;transform:translate(-50%,-50%) scale(1.4);transition:opacity .18s,transform .18s}
+.aim-pop-actions{position:absolute;bottom:92px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;justify-content:center}
+.aim-pop-actions button{font:9px 'IBM Plex Mono',monospace;letter-spacing:1.2px;color:#9bb6c6;background:#0b1a2799;border:1px solid #3d5d7066;padding:11px 14px;cursor:pointer;border-radius:2px;backdrop-filter:blur(8px)}
+.aim-pop-actions button.primary{color:#d8c6a8;border-color:#b99b7066}
+.aim-pop-actions button:hover{border-color:#8bb1c9;color:#e1eef5}
+body.aim-pop-active .instrument,body.aim-pop-active .scene-caption,body.aim-pop-active #touch-nav{opacity:.15;pointer-events:none}
 #app-container canvas:not(.hand-debug-layer){display:block;width:100%;height:100%}
 .atmosphere{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at 50% 38%,#37618808 0%,transparent 52%,#01050a55 100%);box-shadow:inset 0 0 120px #0003}
 body.camera-live .atmosphere{background:radial-gradient(ellipse at 50% 38%,#2a6a9310 0%,transparent 52%,#01050a30 100%);box-shadow:inset 0 0 90px #0002}

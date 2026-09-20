@@ -38,3 +38,4 @@ __pycache__/
 .qa-*/
 client/tests/*.png
 client/tests/qa-results*.json
+client/tests/qa-pointer-mobile.json

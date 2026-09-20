@@ -22,6 +22,8 @@ import { HandPresenceState }  from '../tracking/NormalizedHandState';
 import { Landmark }               from '../tracking/LandmarkFilter';
 import { HandDebugLayer }         from '../debug/HandDebugLayer';
 import { PerformanceProfileManager } from '../perf/PerformanceProfileManager';
+import { AimPopPractice } from '../experiences/AimPopPractice';
+import { AimPopOverlay } from '../ui/AimPopOverlay';
 
 // ─── Gesture pipeline thresholds ────────────────────────────────────────────
 
@@ -102,6 +104,48 @@ async function bootstrap() {
   const debug          = new DebugOverlay();
   const cameraOverlay  = new CameraStateOverlay();
   const coachmarks     = new GestureCoachmarks();
+  const aimPop         = new AimPopPractice();
+  const aimPopUi       = new AimPopOverlay();
+  let practiceActive = false;
+  let prevPinchState = 'OPEN';
+  let practiceClock = 0;
+
+  function stopPractice() {
+    practiceActive = false;
+    handControl.suppressScene = false;
+    aimPopUi.hide();
+    document.body.classList.remove('aim-pop-active');
+    prevPinchState = 'OPEN';
+  }
+
+  function startPractice() {
+    practiceActive = true;
+    handControl.suppressScene = true;
+    handControl.reset();
+    aimPop.reset();
+    aimPop.spawn(0.5, 0.42);
+    aimPopUi.show();
+    aimPopUi.sync(aimPop);
+    document.body.classList.add('aim-pop-active');
+    if (statusBar) statusBar.textContent = 'AIM & POP · SHOW YOUR HAND · PINCH TO SCORE';
+    coachmarks.showTip('aim_pop', '◎', 'MOVE TIP ONTO A CIRCLE · PINCH TO POP', 4500);
+  }
+
+  function enterOrbitFromPractice() {
+    stopPractice();
+    if (statusBar) statusBar.textContent = 'HOLOGRAPHIC INTERFACE · CAMERA HAND TRACKING ACTIVE';
+    coachmarks.showTip('onboarding_start', '✋', 'MOVE AN OPEN HAND TO BROWSE · PINCH TO OPEN', 4000);
+    showToast('ORBIT UNLOCKED · BROWSE CARDS WITH YOUR HAND', 3500);
+  }
+
+  aimPopUi.onPlayAgain = () => {
+    aimPop.reset();
+    aimPop.spawn(0.5, 0.42);
+    aimPopUi.sync(aimPop);
+    audio.playCardSelect();
+  };
+  aimPopUi.onEnterOrbit = () => enterOrbitFromPractice();
+  aimPopUi.onMouseMode = () => enableTouchMode('SWITCHED TO MOUSE & TOUCH MODE');
 
   cameraOverlay.setCallbacks(
     () => enableTouchMode('SWITCHED TO MOUSE & TOUCH MODE'),
@@ -118,6 +162,7 @@ async function bootstrap() {
     isCameraMode = false;
     modeVersion++;
     aiBridge.cancelPending();
+    stopPractice();
     handControl.reset();
     tracker.stop();
     coachmarks.hide();
@@ -146,6 +191,7 @@ async function bootstrap() {
     isCameraMode = true;
     const version=++modeVersion;
     aiBridge.cancelPending();
+    stopPractice();
     handControl.reset();
     pointerController.disable();
     cursor.hide();
@@ -158,29 +204,39 @@ async function bootstrap() {
     }
 
     if (statusBar) {
-      statusBar.textContent = 'HOLOGRAPHIC INTERFACE · CAMERA HAND TRACKING ACTIVE';
+      statusBar.textContent = 'HOLOGRAPHIC INTERFACE · STARTING CAMERA…';
     }
 
-    cameraOverlay.setState('CAMERA_LOADING', 'Initializing vision system and neural detector...');
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      cameraOverlay.setState('CAMERA_ERROR', 'Camera needs HTTPS (or localhost). Open the secure site URL and try again.');
+      return;
+    }
+
+    cameraOverlay.setState('CAMERA_LOADING', 'Allow camera access when prompted, then show your hand for Aim & Pop practice.');
 
     tracker.start(video)
       .then(() => {
         if(version!==modeVersion || !isCameraMode)return;
         cameraOverlay.setState('CAMERA_READY');
         audio.playTrackingRestored();
-        coachmarks.showTip('onboarding_start', '✋', 'MOVE AN OPEN HAND TO BROWSE · PINCH TO OPEN', 4000);
+        startPractice();
       })
       .catch((err: any) => {
         if(version!==modeVersion || !isCameraMode)return;
         console.warn('[Camera] Failed to start:', err.message || err);
-        if (err.message === 'CAMERA_DENIED') {
+        const msg = String(err.message || err);
+        if (msg === 'CAMERA_DENIED') {
           cameraOverlay.setState('CAMERA_DENIED');
-        } else if (err.message === 'CAMERA_BUSY') {
-          cameraOverlay.setState('CAMERA_ERROR', 'Webcam is in use by another app. Close it and retry, or use Touch mode.');
-        } else if (err.message === 'CAMERA_NOT_FOUND') {
-          cameraOverlay.setState('CAMERA_ERROR', 'No camera was detected on this device.');
+        } else if (msg === 'CAMERA_BUSY') {
+          cameraOverlay.setState('CAMERA_ERROR', 'Webcam is in use by another app. Close Zoom/Teams/etc, then Retry.');
+        } else if (msg === 'CAMERA_NOT_FOUND') {
+          cameraOverlay.setState('CAMERA_ERROR', 'No camera was detected. Plug in a webcam or use Mouse mode.');
+        } else if (msg === 'MEDIAPIPE_MISSING') {
+          cameraOverlay.setState('CAMERA_ERROR', 'Hand AI failed to load (MediaPipe). Check your network, refresh, then Retry.');
+        } else if (msg === 'INSECURE_CONTEXT' || msg === 'CAMERA_NOT_SUPPORTED') {
+          cameraOverlay.setState('CAMERA_ERROR', 'This browser blocked the camera. Use HTTPS or localhost, then Retry.');
         } else {
-          cameraOverlay.setState('CAMERA_ERROR', 'Failed to connect to camera.');
+          cameraOverlay.setState('CAMERA_ERROR', 'Failed to connect to camera. Retry or use Mouse mode.');
         }
       });
   }
@@ -276,6 +332,23 @@ async function bootstrap() {
     frame.stage={width:innerWidth,height:innerHeight};
     const r=handControl.process(frame);
     latestRawLandmarks=r.raw;
+
+    if(practiceActive){
+      const now=frame.timestamp;
+      const dt=Math.min(0.05, Math.max(0.001, (now - practiceClock) / 1000 || 0.033));
+      practiceClock=now;
+      const handVisible=!!(r.pointer || r.presence?.landmarks || frame.hands.some(h=>h.landmarks?.length===21));
+      aimPop.update(dt, now, handVisible);
+      const pinch=r.pinchState;
+      if(pinch==='PINCHED' && prevPinchState!=='PINCHED' && r.pointer){
+        const hit=aimPop.tryHit(r.pointer.x, r.pointer.y);
+        if(hit){aimPopUi.flashHit(hit);audio.playPinchStart();coachmarks.completeTip('aim_pop');}
+        else audio.playCardSelect();
+      }
+      prevPinchState=pinch;
+      aimPopUi.sync(aimPop);
+    }
+
     const key=r.state+':'+r.target+':'+experiences.state.state;
     if(key!==stateKey){stateVersion++;stateKey=key;aiBridge.cancelPending();}
     const localState=r.state==='ZOOM'?GestureState.ZOOMING:r.state==='DRAG'?GestureState.GRABBING:
@@ -283,7 +356,7 @@ async function bootstrap() {
     stateMachine.forceTransition(localState);
     recordGesture(r.state);
     // One request per sustained uncertain episode, never per landmark frame.
-    const uncertain=!!r.target && r.quality>=.45 &&
+    const uncertain=!practiceActive && !!r.target && r.quality>=.45 &&
       (r.quality<.65 || ((r.pose==='UNKNOWN'||r.pose==='RELAXED')&&(r.state==='HOVER'||r.state==='POINT')));
     if(uncertain){
       if(!uncertainSince)uncertainSince=frame.timestamp;
@@ -296,8 +369,10 @@ async function bootstrap() {
             trajectory:handControl.engine.history.slice(-12),candidateGestures:['POINT','SELECT']}});
       }
     }else{uncertainSince=0;ambiguitySent=false;}
-    if(r.clickTarget){coachmarks.completeTip('pinch_hint');coachmarks.completeTip('onboarding_start');}
-    else if(r.target)coachmarks.showTip('pinch_hint','◎','PINCH TO OPEN · MOVE AN OPEN HAND TO BROWSE',4000);
+    if(!practiceActive){
+      if(r.clickTarget){coachmarks.completeTip('pinch_hint');coachmarks.completeTip('onboarding_start');}
+      else if(r.target)coachmarks.showTip('pinch_hint','◎','PINCH TO OPEN · MOVE AN OPEN HAND TO BROWSE',4000);
+    }
     if(performance.now()-lastTelemetry>100){
       lastTelemetry=performance.now();
       const drawStats=scene.getDrawStats();
@@ -345,6 +420,7 @@ async function bootstrap() {
         historySize:handControl.engine.history.length,cursor:cursor.group.position.toArray(),
         pointerVisible:handPointer.visible,pointerState:handPointer.state,pointerXY:[handPointer.x,handPointer.y],
         profile:perf.profile.name,pixelRatio:scene.renderer.getPixelRatio(),draw:scene.getDrawStats(),fps:lastFPS,
+        practice:practiceActive,aimScore:aimPop.score,aimCombo:aimPop.combo,handOk:aimPop.handOk,
         cards:carousel.getCards().map((c,i)=>{const p=c.group.getWorldPosition(new THREE.Vector3()).project(scene.camera);return {id:'card-'+i,x:(p.x+1)/2,y:(1-p.y)/2,worldX:c.group.position.x,visible:c.group.visible};})}),
       hitTest:handControl.hitTest,
     };

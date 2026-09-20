@@ -135,7 +135,7 @@ export class CameraStateOverlay {
         this.iconEl.textContent = '✋';
         this.iconEl.style.color = '#00ff88';
         this.titleEl.textContent = 'Camera Ready';
-        this.subtitleEl.textContent = 'Show your hand to the camera to begin interacting with the holographic interface.';
+        this.subtitleEl.textContent = customDetails || 'Show your hand to the camera. A quick Aim & Pop practice starts next.';
         this.show();
         setTimeout(() => {
           if (this.state === 'CAMERA_READY') {

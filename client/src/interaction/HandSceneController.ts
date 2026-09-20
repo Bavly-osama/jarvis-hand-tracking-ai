@@ -21,6 +21,8 @@ export class HandSceneController {
   private buttons:{element:HTMLButtonElement;rect:DOMRect}[]=[];
   private lastBounds=0;
   drive3dCursor=false;
+  /** When true, tracking still runs but carousel/experience actions are ignored (Aim & Pop). */
+  suppressScene=false;
   result:ReturnType<HandInteractionEngine['process']>|null=null;
   clicks=0;
   constructor(
@@ -99,6 +101,11 @@ export class HandSceneController {
     const r=this.engine.process(frame,this.hitTest,{id:this.experiences.state.state+':'+this.experiences.name,home:this.experiences.isHome,scale:this.experiences.getZoom()});
     this.lastFrame=performance.now();this.result=r;
     this.drivePointer(frame,r);
+    if(this.suppressScene){
+      this.cursor.setTapProgress(r.progress);
+      this.cursor.setPinchState(r.pinchState,false);
+      return r;
+    }
     if(this.drive3dCursor&&r.pointer){this.experiences.pointer(r.pointer.x,r.pointer.y);screenToWorld(r.pointer,this.scene.camera,this.vector);this.cursor.updatePosition(this.vector.x,this.vector.y,this.vector.z);}
     else if(r.pointer)this.experiences.pointer(r.pointer.x,r.pointer.y);
     this.cursor.setAttractionStrength(r.target||r.capturedTarget?1:0);this.cursor.setTapProgress(r.progress);

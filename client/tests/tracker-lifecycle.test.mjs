@@ -26,3 +26,12 @@ test('overlapping send is skipped while isProcessingFrame',async()=>{
   assert.equal(t.isProcessingFrame,true);
   release();await first;t.stop();
 });
+test('missing MediaPipe reports MEDIAPIPE_MISSING',async()=>{
+  const e=environment(async()=>stream());
+  const original=globalThis.Hands;
+  // @ts-expect-error test delete
+  delete globalThis.Hands;
+  const t=new HandTracker();
+  await assert.rejects(t.start(e.video),/MEDIAPIPE_MISSING/);
+  globalThis.Hands=original;
+});
