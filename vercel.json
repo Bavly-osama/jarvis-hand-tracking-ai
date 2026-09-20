@@ -1,10 +1,22 @@
 {
-  "buildCommand": "cd client && npm install && npm run build",
+  "installCommand": "npm install && npm install --prefix server && npm install --prefix client",
+  "buildCommand": "npm run build --prefix client",
   "outputDirectory": "client/dist",
   "framework": "vite",
+  "functions": {
+    "api/[[...path]].ts": {
+      "includeFiles": "server/src/**",
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/health",
+      "destination": "/api/health"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

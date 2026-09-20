@@ -90,7 +90,8 @@ export class GeminiIntentBridge {
   public requestIntent(context: AIRequestPayload) {
     const now = Date.now();
     this.expire(now);
-    if(!this.socket.isConnected() || this.pendingRequests.size>0)return;
+    // Allow REST fallback when Socket.IO is offline (Vercel has no long-lived WS)
+    if (this.pendingRequests.size > 0) return;
     if (now - this.lastRequestTime < this.REQUEST_COOLDOWN_MS) return;
     this.lastRequestTime = now;
 

@@ -186,8 +186,32 @@ export class SocketClient {
   public requestAIIntent(payload: AIRequestPayload) {
     if (this.connected_) {
       this.socket.emit('ai:intent-request', payload);
+      return;
     }
-    // Don't queue AI requests — they're time-sensitive
+    // REST fallback when Socket.IO is unavailable (e.g. Vercel serverless)
+    void this._requestAIIntentRest(payload);
+  }
+
+  private async _requestAIIntentRest(payload: AIRequestPayload) {
+    try {
+      const res = await fetch('/api/ai/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        console.warn('[SocketClient] REST AI intent HTTP', res.status);
+        return;
+      }
+      const data = (await res.json()) as AIResponsePayload;
+      this.aiResponseCallback?.({
+        ...data,
+        requestId: data.requestId ?? payload.requestId,
+        stateVersion: data.stateVersion ?? payload.stateVersion,
+      });
+    } catch (err) {
+      console.warn('[SocketClient] REST AI intent failed', err);
+    }
   }
 
   public onAIResponse(callback: AIResponseCallback) {
