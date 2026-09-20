@@ -4,7 +4,7 @@
   "outputDirectory": "client/dist",
   "framework": "vite",
   "functions": {
-    "api/[...path].ts": {
+    "api/index.ts": {
       "includeFiles": "server/src/**",
       "memory": 1024,
       "maxDuration": 30
@@ -13,10 +13,14 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "/api/health"
+      "destination": "/api?route=/health"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/api/:path*",
+      "destination": "/api?route=/api/:path*"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
