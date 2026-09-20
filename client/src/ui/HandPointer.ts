@@ -3,8 +3,8 @@ import { cameraToScreenCoordinates, type CameraSpace, type CameraFrameSize } fro
 export type PointerVisualState = 'TRACKING' | 'HOVER' | 'PRESS' | 'GRAB' | 'WEAK' | 'LOST';
 
 /** Hold last tip through brief MediaPipe gaps; fade only after sustained loss. */
-export const POINTER_HOLD_MS = 420;
-export const POINTER_FADE_MS = 1100;
+export const POINTER_HOLD_MS = 200;
+export const POINTER_FADE_MS = 900;
 
 export type StageRect = { left: number; top: number; width: number; height: number };
 

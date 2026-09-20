@@ -20,6 +20,7 @@ export class HandSceneController {
   private lastFrame=-Infinity;
   private buttons:{element:HTMLButtonElement;rect:DOMRect}[]=[];
   private lastBounds=0;
+  private parallaxActive=false;
   drive3dCursor=false;
   /** When true, tracking still runs but carousel/experience actions are ignored (Aim & Pop). */
   suppressScene=false;
@@ -79,7 +80,6 @@ export class HandSceneController {
   }
   private drivePointer(frame:HandFrame,r:ReturnType<HandInteractionEngine['process']>){
     if(!this.handPointer)return;
-    // Prefer engine logical tip (same space as hitTest). Fall back to raw camera or presence hold.
     if(r.pointer){
       this.handPointer.setLogicalTarget(r.pointer.x,r.pointer.y,frame.timestamp);
     }else if(r.presence?.landmarks?.[8]){
@@ -92,7 +92,7 @@ export class HandSceneController {
         this.handPointer.setTarget(mapped.screenX,mapped.screenY,frame.timestamp);
       }
     }
-    if(r.state==='DRAG'||r.mode==='ZOOM')this.handPointer.setInteractionState('GRAB');
+    if(r.mode==='ZOOM')this.handPointer.setInteractionState('GRAB');
     else if(r.pinchState==='PINCHED'||r.state.startsWith('PINCH'))this.handPointer.setInteractionState('PRESS');
     else if(r.target)this.handPointer.setInteractionState('HOVER');
     else if(r.pointer||r.presence?.landmarks)this.handPointer.setInteractionState('TRACKING');
@@ -114,19 +114,34 @@ export class HandSceneController {
     this.lastTarget=r.target;
     this.carousel.setHover(r.target?.startsWith('card-')?Number(r.target.slice(5)):-1);
     this.carousel.setHandPress(r.progress>0?r.target:null,r.progress);
-    const browsing=this.experiences.isHome&&r.mode!=='ZOOM'&&r.pinchState==='OPEN'&&(r.dragDelta.x||r.dragDelta.y);
-    if((r.dragStart||browsing)&&this.experiences.isHome)this.carousel.beginHandDrag();
-    if(r.state==='DRAG'||browsing){
-      if(this.experiences.isHome)this.carousel.dragHand(r.dragDelta.x);
-      else if(r.state==='DRAG')this.experiences.rotate(r.dragDelta.x,r.dragDelta.y);
-    }
-    if(r.dragEnd)this.carousel.endHandDrag(r.velocity.x);
-    if(r.zoom!==null)this.experiences.zoom(r.zoom);
-    if(r.clickTarget){
+
+    // Priority: ZOOM > PINCH click > MOVE
+    if(r.zoom!==null){
+      this.carousel.cancelHandDrag();
+      this.parallaxActive=false;
+      this.experiences.zoom(r.zoom);
+    }else if(r.clickTarget){
+      this.carousel.cancelHandDrag();
+      this.parallaxActive=false;
       this.clicks++;this.cursor.pulse();this.audio.playPinchStart();
       if(r.clickTarget.startsWith('card-')){this.carousel.focusForOpen(Number(r.clickTarget.slice(5)));this.experiences.activate();}
       else if(r.clickTarget.startsWith('button:'))document.getElementById(r.clickTarget.slice(7))?.click();
       else this.experiences.activate();
+    }else if(this.experiences.isHome && r.mode!=='ZOOM' && r.pinchState==='OPEN'){
+      if(r.navStep && !this.carousel.isAnimating){
+        this.carousel.cancelHandDrag();
+        this.parallaxActive=false;
+        this.carousel.step(r.navStep);
+      }else if((r.dragDelta.x||r.dragDelta.y) && !this.carousel.isAnimating && !r.navLocked){
+        if(!this.parallaxActive){this.carousel.beginHandDrag();this.parallaxActive=true;}
+        this.carousel.dragHand(r.dragDelta.x);
+      }else if(this.parallaxActive && !r.dragDelta.x && !r.dragDelta.y){
+        this.carousel.cancelHandDrag();
+        this.parallaxActive=false;
+      }
+    }else if(this.parallaxActive){
+      this.carousel.cancelHandDrag();
+      this.parallaxActive=false;
     }
     return r;
   }
@@ -141,5 +156,5 @@ export class HandSceneController {
     else this.cursor.hide();
     return presence;
   }
-  reset(){this.engine.reset();this.carousel.endHandDrag(0);this.carousel.setHover(-1);this.carousel.setHandPress(null,0);this.result=null;this.lastTarget=null;this.buttons=[];this.lastBounds=0;this.cursor.setTapProgress(0);}
+  reset(){this.engine.reset();this.carousel.cancelHandDrag();this.parallaxActive=false;this.carousel.setHover(-1);this.carousel.setHandPress(null,0);this.result=null;this.lastTarget=null;this.buttons=[];this.lastBounds=0;this.cursor.setTapProgress(0);}
 }

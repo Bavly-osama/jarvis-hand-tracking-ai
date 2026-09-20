@@ -38,12 +38,19 @@ export class CarouselController {
     this.timeline?.kill();this.navigation.completeTransition();this.presentation.anticipation=0;
     this.handDragging=true;this.handStartAngle=this.carouselAngle;this.handOffset=0;
   }
+  /** Drop parallax without changing the selected card index. */
+  public cancelHandDrag(){
+    if(!this.handDragging)return;
+    this.handDragging=false;
+    this.handOffset=0;
+    this.carouselAngle=this.navigation.index*CARD_STEP;
+  }
   public dragHand(deltaX:number){
     if(!this.handDragging||!Number.isFinite(deltaX))return;
     this.handOffset+=deltaX;
     const limit=CARD_STEP*1.2;
     const offset=limit*Math.tanh(this.handOffset/limit);
-    // Invert vs prior sign: hand-right must move the rail right on mirrored webcam.
+    // Logical +X (hand RIGHT) increases carouselAngle — same sign as navStep +1.
     this.carouselAngle=this.handStartAngle+offset;
   }
   public endHandDrag(velocityX:number){

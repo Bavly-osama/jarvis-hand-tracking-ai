@@ -11,7 +11,7 @@ import { MODULES, MODULE_HINTS, ModuleName } from './modules';
 
 const LOCATIONS = [ ['Cairo','30.04 N / 31.24 E'], ['London','51.51 N / 0.13 W'], ['Tokyo','35.68 N / 139.69 E'], ['Sydney','33.87 S / 151.21 E'] ];
 const FILES = ['Field notes','Orbit log','Signal map','Core manual','Route plan','Scan report','Power model'];
-const FILE_CONTENT = ['Observation: cloud cover is a reference texture, not a current forecast.','Orbit reference: Earth axial tilt 23.44 degrees; mean radius 6,371 km.','Signal map: cyan links represent illustrative communication routes.','Controls: swipe to navigate, pinch to select, grab to rotate, spread to zoom.','Route plan: select a destination and confirm to draw its path.','Scan report: simulated targets are safe to inspect. No real security systems are connected.','Power model: balanced, reserve and performance modes adjust simulated distribution.'];
+const FILE_CONTENT = ['Observation: cloud cover is a reference texture, not a current forecast.','Orbit reference: Earth axial tilt 23.44 degrees; mean radius 6,371 km.','Signal map: cyan links represent illustrative communication routes.','Controls: move hand left/right to browse, pinch to select, two hands to zoom.','Route plan: select a destination and confirm to draw its path.','Scan report: simulated targets are safe to inspect. No real security systems are connected.','Power model: balanced, reserve and performance modes adjust simulated distribution.'];
 
 export class ExperienceController {
   readonly state = new ExperienceState();

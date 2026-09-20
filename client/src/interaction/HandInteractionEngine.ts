@@ -12,13 +12,20 @@ export const HAND_CONFIG = {
   PINCH_RELEASE_RATIO: 0.34,
   PINCH_STABLE_MS: 100,
   CLICK_MOVE_THRESHOLD: 0.025,
-  DRAG_ACTIVATION_THRESHOLD: 0.045,
-  MIN_ZOOM: 0.6,
-  MAX_ZOOM: 2.5,
+  /** Cancel a pinch candidate if the palm drifts this far (no drag mode). */
+  PINCH_CANCEL_MOVE: 0.045,
+  MIN_ZOOM: 0.7,
+  MAX_ZOOM: 2.0,
   ZOOM_DEAD_ZONE: 0.025,
   ZOOM_STABILIZE_MS: 120,
   ZOOM_SMOOTH: 0.35,
   ZOOM_LOSS_MS: TRACK_GRACE_MS,
+  /** Accumulated logical ΔX before one-card snap (positive = RIGHT). */
+  NAV_THRESHOLD: 0.085,
+  /** Palm speed below this unlocks the next nav step after a snap. */
+  NAV_UNLOCK_SPEED: 0.08,
+  /** Consecutive near-still frames required to unlock after a snap. */
+  NAV_UNLOCK_FRAMES: 4,
   TRACK_GRACE_MS,
   TRACK_ENTER_CONFIDENCE: 0.62,
   TRACK_KEEP_CONFIDENCE: 0.42,
@@ -33,10 +40,12 @@ export type HandFrame = {
   stage?: { width: number; height: number };
 };
 export type HandContext = { id: string; home: boolean; scale: number };
-export type HandGesture = 'IDLE' | 'HOVER' | 'POINT' | 'PINCH_START' | 'PINCH_CONFIRMED' | 'RELEASE' | 'DRAG' | 'ZOOM' | 'RECOVERING_TRACKING';
+export type HandGesture = 'IDLE' | 'HOVER' | 'POINT' | 'PINCH_START' | 'PINCH_CONFIRMED' | 'RELEASE' | 'MOVE' | 'ZOOM' | 'RECOVERING_TRACKING';
 export type PinchState = 'OPEN' | 'PINCH_CANDIDATE' | 'PINCHED' | 'RELEASE_WAIT';
 export type ZoomPhase = 'NONE' | 'TWO_HAND_CANDIDATE' | 'ZOOM_ACTIVE' | 'ZOOM_END';
-export type InteractionMode = 'IDLE' | 'POINTER' | 'HOVER' | 'PINCH' | 'DRAG' | 'ZOOM';
+export type InteractionMode = 'IDLE' | 'POINTER' | 'HOVER' | 'PINCH' | 'MOVE' | 'ZOOM';
+/** +1 = hand moved RIGHT → next card; -1 = LEFT → previous card; 0 = none. */
+export type NavStep = -1 | 0 | 1;
 
 const distance = (a: Landmark, b: Landmark) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const zero = () => ({ x: 0, y: 0, z: 0 });
@@ -86,6 +95,11 @@ export class HandInteractionEngine {
   private debugHands: { id: string; state: string; confidence: number; rawX: number; rawY: number; filteredX: number; filteredY: number; velocityX: number; velocityY: number; handedness: string }[] = [];
   private zoomDistance = 0;
   private zoomRatio = 1;
+  private navAccum = 0;
+  private navLocked = false;
+  private navIdleFrames = 0;
+  /** True after entering PINCHED until click fires on release (one-shot). */
+  private pinchArmed = false;
 
   reset() {
     this.filters.forEach(f => f.reset());
@@ -100,7 +114,11 @@ export class HandInteractionEngine {
     this.lastSeen = this.lastTime = -Infinity;
     this.pinchTarget = this.pinchOrigin = null;
     this.pinchClicked = false;
+    this.pinchArmed = false;
     this.zoomStartDistance = 0;
+    this.navAccum = 0;
+    this.navLocked = false;
+    this.navIdleFrames = 0;
     this.context = '';
     this.tracks = [];
     this.debugHands = [];
@@ -150,6 +168,8 @@ export class HandInteractionEngine {
       dragDelta: zero(),
       dragStart: false,
       dragEnd: false,
+      navStep: 0 as NavStep,
+      navLocked: this.navLocked,
       zoom: this.zoomPhase === 'NONE' ? null as number | null : this.zoomRendered,
       pinchDistance: 1,
       pinchRatio: 1,
@@ -173,7 +193,6 @@ export class HandInteractionEngine {
 
   process(frame: HandFrame, hitTest: (x: number, y: number) => string | null, context: HandContext) {
     const now = frame.timestamp;
-    const wasDragging = this.state === 'DRAG';
     const result = this.emptyResult(now);
     if (!Number.isFinite(now) || now <= this.lastTime) return result;
     this.lastTime = now;
@@ -184,8 +203,10 @@ export class HandInteractionEngine {
       this.pinchState = 'OPEN';
       this.pinchTarget = null;
       this.pinchClicked = true;
+      this.pinchArmed = false;
       this.zoomPhase = 'NONE';
-      result.dragEnd = wasDragging;
+      this.navAccum = 0;
+      this.navLocked = false;
     }
     this.context = context.id;
 
@@ -213,6 +234,7 @@ export class HandInteractionEngine {
       result.presence = this.presence.update(null, 0, zero(), now) as typeof result.presence;
       result.clickTarget = null;
       result.dragDelta = zero();
+      result.navStep = 0;
       if (this.zoomPhase === 'ZOOM_ACTIVE' || this.zoomPhase === 'TWO_HAND_CANDIDATE') {
         if (!this.zoomPausedAt) this.zoomPausedAt = now;
         result.zoom = this.zoomRendered;
@@ -225,15 +247,18 @@ export class HandInteractionEngine {
         this.pinchState = 'OPEN';
         this.pinchTarget = null;
         this.pinchClicked = true;
+        this.pinchArmed = false;
         this.motion.reset();
         this.previous = this.anchor = null;
+        this.navAccum = 0;
+        this.navLocked = false;
         if (this.zoomPhase !== 'NONE') this.zoomPhase = 'ZOOM_END';
         this.state = result.presence.state === HandPresenceState.LOST ? 'IDLE' : 'RECOVERING_TRACKING';
         this.mode = 'IDLE';
-        result.dragEnd = wasDragging;
       }
       result.state = this.state;
       result.mode = this.mode;
+      result.navLocked = this.navLocked;
       return result;
     }
 
@@ -245,8 +270,11 @@ export class HandInteractionEngine {
       this.previous = { ...usable[0].landmarks[9] };
       this.anchor = { ...usable[0].landmarks[9] };
       this.pinchClicked = true;
+      this.pinchArmed = false;
       this.pinchState = 'OPEN';
       this.pinchTarget = null;
+      this.navAccum = 0;
+      this.navLocked = false;
     }
 
     const filtered = usable.map((h, i) => this.filters[i].filter([h.landmarks], now / 1000).filtered[0]);
@@ -324,16 +352,20 @@ export class HandInteractionEngine {
         result.zoom = this.zoomPhase === 'ZOOM_ACTIVE' ? this.zoomRendered : context.scale;
         result.zoomRatio = this.zoomRatio;
         result.zoomStartDistance = this.zoomStartDistance;
-        result.dragEnd = wasDragging;
         result.dragDelta = zero();
+        result.navStep = 0;
+        this.navAccum = 0;
+        this.navLocked = true;
         this.state = 'ZOOM';
         this.mode = 'ZOOM';
         this.pinchState = 'OPEN';
         this.pinchTarget = null;
         this.pinchClicked = true;
+        this.pinchArmed = false;
         result.state = this.state;
         result.mode = this.mode;
         result.zoomState = this.zoomPhase;
+        result.navLocked = this.navLocked;
         this.previous = { ...palm };
         this.pushHistory(now, pointer, liveTarget, usable[0].quality);
         return result;
@@ -345,97 +377,125 @@ export class HandInteractionEngine {
       this.state = 'ZOOM';
       this.mode = 'ZOOM';
       result.dragDelta = zero();
+      result.navStep = 0;
       if (now - this.zoomPausedAt > HAND_CONFIG.ZOOM_LOSS_MS) {
         this.zoomPhase = 'ZOOM_END';
         this.state = 'RELEASE';
         this.mode = 'POINTER';
         this.pinchClicked = true;
+        this.pinchArmed = false;
         this.pinchState = 'OPEN';
+        this.navLocked = false;
+        this.navAccum = 0;
       } else {
         result.state = this.state;
         result.mode = this.mode;
+        result.navLocked = this.navLocked;
         this.previous = { ...palm };
         this.pushHistory(now, pointer, liveTarget, usable[0].quality);
         return result;
       }
     }
 
+    // ── PINCH (click on release) ───────────────────────────────────────────
     const released = pinchRatio > HAND_CONFIG.PINCH_RELEASE_RATIO;
-    if (released) {
-      if (this.pinchState === 'PINCHED' || this.pinchState === 'RELEASE_WAIT' || this.pinchClicked) this.pinchState = 'OPEN';
-      else this.pinchState = 'OPEN';
-      this.pinchClicked = false;
-      this.pinchTarget = null;
-      this.pinchOrigin = null;
-    }
-
     const pinchMove = this.pinchOrigin ? distance(palm, this.pinchOrigin) : 0;
     const wantsPinch = pinchRatio < HAND_CONFIG.PINCH_DOWN_RATIO;
-    if (wantsPinch && this.pinchState === 'OPEN' && !this.pinchClicked) {
+
+    if (released) {
+      if (this.pinchArmed && this.pinchTarget) {
+        result.clickTarget = this.pinchTarget;
+      }
+      this.pinchArmed = false;
+      this.pinchState = 'OPEN';
+      this.pinchTarget = null;
+      this.pinchOrigin = null;
+      this.pinchClicked = false;
+    } else if (wantsPinch && this.pinchState === 'OPEN' && !this.pinchClicked) {
       this.pinchState = 'PINCH_CANDIDATE';
       this.pinchAt = now;
       this.pinchOrigin = { ...palm };
       this.pinchTarget = liveTarget;
+      this.pinchArmed = false;
     } else if (wantsPinch && this.pinchState === 'PINCH_CANDIDATE') {
-      if (pinchMove > HAND_CONFIG.DRAG_ACTIVATION_THRESHOLD) {
+      if (pinchMove > HAND_CONFIG.PINCH_CANCEL_MOVE) {
         this.pinchState = 'OPEN';
         this.pinchClicked = true;
+        this.pinchArmed = false;
         this.pinchTarget = null;
-        if (!wasDragging) result.dragStart = true;
-        this.state = 'DRAG';
-        this.mode = 'DRAG';
+        this.pinchOrigin = null;
       } else if (now - this.pinchAt >= HAND_CONFIG.PINCH_STABLE_MS && pinchMove <= HAND_CONFIG.CLICK_MOVE_THRESHOLD) {
         this.pinchState = 'PINCHED';
-        if (this.pinchTarget && !this.pinchClicked) {
-          result.clickTarget = this.pinchTarget;
-          this.pinchClicked = true;
-          this.state = 'PINCH_CONFIRMED';
-        }
+        this.pinchArmed = !!this.pinchTarget;
       }
     } else if (this.pinchState === 'PINCHED') {
-      if (pinchMove > HAND_CONFIG.DRAG_ACTIVATION_THRESHOLD) {
-        this.pinchState = 'RELEASE_WAIT';
-        this.pinchClicked = true;
-        if (!wasDragging) result.dragStart = true;
-        this.state = 'DRAG';
-        this.mode = 'DRAG';
+      this.mode = 'PINCH';
+      this.state = 'PINCH_CONFIRMED';
+    }
+
+    const pinchActive = this.pinchState === 'PINCH_CANDIDATE' || this.pinchState === 'PINCHED';
+
+    // ── MOVE (parallax + one-card snap) ────────────────────────────────────
+    let navStep: NavStep = 0;
+    const speed = Math.hypot(velocity.x, velocity.y);
+    if (pinchActive) {
+      result.dragDelta = zero();
+      this.navAccum = 0;
+    } else if (context.home) {
+      const dx = motion.reanchored ? 0 : motion.deltaX;
+      result.dragDelta = { x: dx, y: motion.reanchored ? 0 : motion.deltaY, z: 0 };
+
+      if (this.navLocked) {
+        const still = Math.abs(dx) <= HAND_CONFIG.DEAD_ZONE && speed < HAND_CONFIG.NAV_UNLOCK_SPEED;
+        if (still) {
+          this.navIdleFrames++;
+          if (this.navIdleFrames >= HAND_CONFIG.NAV_UNLOCK_FRAMES) {
+            this.navLocked = false;
+            this.navAccum = 0;
+            this.navIdleFrames = 0;
+          }
+        } else {
+          this.navIdleFrames = 0;
+        }
       } else {
-        this.state = 'PINCH_CONFIRMED';
-        this.mode = 'PINCH';
+        this.navIdleFrames = 0;
+        this.navAccum += dx;
+        if (Math.abs(this.navAccum) >= HAND_CONFIG.NAV_THRESHOLD) {
+          navStep = (this.navAccum > 0 ? 1 : -1) as NavStep;
+          this.navAccum = 0;
+          this.navLocked = true;
+          this.navIdleFrames = 0;
+        }
+      }
+
+      if (Math.abs(dx) > HAND_CONFIG.DEAD_ZONE || Math.abs(this.navAccum) > 0.02) {
+        this.state = 'MOVE';
+        this.mode = 'MOVE';
+      } else if (this.pinchState === 'OPEN') {
+        this.state = liveTarget ? 'HOVER' : 'POINT';
+        this.mode = liveTarget ? 'HOVER' : 'POINTER';
+      }
+    } else {
+      result.dragDelta = zero();
+      this.navAccum = 0;
+      if (this.pinchState === 'OPEN') {
+        this.state = liveTarget ? 'HOVER' : 'POINT';
+        this.mode = liveTarget ? 'HOVER' : 'POINTER';
       }
     }
 
-    const browseMove = this.anchor ? distance(palm, this.anchor) : 0;
-    const canBrowse = context.home && pose.openness > 0.55;
-    if (this.state !== 'DRAG' && this.pinchState === 'OPEN' && canBrowse && browseMove > HAND_CONFIG.DRAG_ACTIVATION_THRESHOLD && !motion.reanchored) {
-      result.dragStart = !wasDragging;
-      this.state = 'DRAG';
-      this.mode = 'DRAG';
-    }
-
-    if (this.state === 'DRAG' || this.mode === 'DRAG') {
-      this.mode = 'ZOOM' === this.mode ? 'DRAG' : 'DRAG';
-      this.state = 'DRAG';
-      result.capturedTarget = null;
-      if (Math.hypot(velocity.x, velocity.y) < 0.04 && now - this.pinchAt > 180 && this.pinchState === 'OPEN') {
-        this.state = 'RELEASE';
-        this.mode = 'POINTER';
-        result.dragEnd = true;
-        this.anchor = { ...palm };
-      }
-    } else if (this.pinchState === 'PINCH_CANDIDATE') {
+    if (this.pinchState === 'PINCH_CANDIDATE') {
       this.state = 'PINCH_START';
       this.mode = 'PINCH';
       result.progress = Math.min(1, (now - this.pinchAt) / HAND_CONFIG.PINCH_STABLE_MS);
-    } else if (this.pinchState === 'PINCHED' || this.state === 'PINCH_CONFIRMED') {
+    } else if (this.pinchState === 'PINCHED') {
       this.state = 'PINCH_CONFIRMED';
       this.mode = 'PINCH';
       result.progress = 1;
-    } else {
-      this.state = liveTarget ? 'HOVER' : 'POINT';
-      this.mode = liveTarget ? 'HOVER' : 'POINTER';
     }
 
+    result.navStep = navStep;
+    result.navLocked = this.navLocked;
     result.capturedTarget = this.pinchTarget;
     result.pinchState = this.pinchState;
     result.state = this.state;

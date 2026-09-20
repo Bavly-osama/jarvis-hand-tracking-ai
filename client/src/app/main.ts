@@ -322,8 +322,6 @@ async function bootstrap() {
     }
   });
   let stateKey='';
-  let uncertainSince=0;
-  let ambiguitySent=false;
   let lastTelemetry=0;
   let lastFPS=0;
   const feedHand = (frame:HandFrame) => {
@@ -351,27 +349,14 @@ async function bootstrap() {
 
     const key=r.state+':'+r.target+':'+experiences.state.state;
     if(key!==stateKey){stateVersion++;stateKey=key;aiBridge.cancelPending();}
-    const localState=r.state==='ZOOM'?GestureState.ZOOMING:r.state==='DRAG'?GestureState.GRABBING:
+    const localState=r.state==='ZOOM'?GestureState.ZOOMING:r.state==='MOVE'?GestureState.POINTING:
       r.state.startsWith('PINCH')?GestureState.PINCHING:r.state==='IDLE'?GestureState.IDLE:GestureState.POINTING;
     stateMachine.forceTransition(localState);
     recordGesture(r.state);
-    // One request per sustained uncertain episode, never per landmark frame.
-    const uncertain=!practiceActive && !!r.target && r.quality>=.45 &&
-      (r.quality<.65 || ((r.pose==='UNKNOWN'||r.pose==='RELAXED')&&(r.state==='HOVER'||r.state==='POINT')));
-    if(uncertain){
-      if(!uncertainSince)uncertainSince=frame.timestamp;
-      if(frame.timestamp-uncertainSince>450&&!ambiguitySent){
-        ambiguitySent=true;
-        aiBridge.requestIntent({requestId:crypto.randomUUID(),stateVersion,recentGestures:gestureHistory.slice(-5).map(h=>h.gesture),
-          activeObject:experiences.isHome?'CAROUSEL':experiences.name,uiState:experiences.state.state,
-          gestureConfidence:Math.min(.7,r.quality),hand:r.handedness,target:r.target,
-          semanticFeatures:{pose:r.pose,handCount:r.handCount,pinchDistance:r.pinchDistance,velocity:r.velocity,
-            trajectory:handControl.engine.history.slice(-12),candidateGestures:['POINT','SELECT']}});
-      }
-    }else{uncertainSince=0;ambiguitySent=false;}
+    // Gemini is not used for MOVE / CLICK / ZOOM — local engine owns those.
     if(!practiceActive){
       if(r.clickTarget){coachmarks.completeTip('pinch_hint');coachmarks.completeTip('onboarding_start');}
-      else if(r.target)coachmarks.showTip('pinch_hint','◎','PINCH TO OPEN · MOVE AN OPEN HAND TO BROWSE',4000);
+      else if(r.target)coachmarks.showTip('pinch_hint','◎','PINCH TO OPEN · MOVE HAND LEFT / RIGHT',4000);
     }
     if(performance.now()-lastTelemetry>100){
       lastTelemetry=performance.now();
