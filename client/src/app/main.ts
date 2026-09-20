@@ -10,6 +10,7 @@ import { GestureStateMachine,
          GestureState }           from '../gestures/GestureStateMachine';
 import { PointerTouchController } from '../interaction/PointerTouchController';
 import { FingertipCursor }        from '../ui/FingertipCursor';
+import { HandPointer }            from '../ui/HandPointer';
 import { DebugOverlay }           from '../debug/DebugOverlay';
 import { SocketClient }           from '../websocket/SocketClient';
 import { GeminiIntentBridge }     from '../ai/GeminiIntentBridge';
@@ -20,6 +21,7 @@ import { HolographicHandRenderer } from '../visual/HolographicHandRenderer';
 import { HandPresenceState }  from '../tracking/NormalizedHandState';
 import { Landmark }               from '../tracking/LandmarkFilter';
 import { HandDebugLayer }         from '../debug/HandDebugLayer';
+import { PerformanceProfileManager } from '../perf/PerformanceProfileManager';
 
 // ─── Gesture pipeline thresholds ────────────────────────────────────────────
 
@@ -41,10 +43,12 @@ async function bootstrap() {
   const btnZoom   = document.getElementById('btn-zoom') as HTMLButtonElement;
 
   // ── Scene ─────────────────────────────────────────────────────────────────
-  const scene    = new SceneManager(container);
-  const globe    = new GlobeController();
-  const carousel = new CarouselController();
+  const perf     = new PerformanceProfileManager();
+  const scene    = new SceneManager(container, perf.profile);
+  const globe    = new GlobeController(perf.profile);
+  const carousel = new CarouselController({ visibleCards: perf.profile.visibleCards, cardTransmission: perf.profile.cardTransmission });
   const cursor   = new FingertipCursor(scene.scene);
+  const handPointer = new HandPointer(container);
 
   scene.scene.add(globe.group);
   scene.scene.add(carousel.group);
@@ -60,11 +64,12 @@ async function bootstrap() {
 
   // ── Gesture pipeline ──────────────────────────────────────────────────────
   const tracker          = new HandTracker();
+  tracker.applyProfile(perf.profile);
   const stateMachine     = new GestureStateMachine();
 
   // ── New hand interaction modules ──────────────────────────────────────────
-  const handRenderer = new HolographicHandRenderer(scene.scene, scene.camera);
-  const handControl = new HandSceneController(scene, carousel, experiences, cursor, audio);
+  const handRenderer = perf.profile.holographicHands ? new HolographicHandRenderer(scene.scene, scene.camera) : null;
+  const handControl = new HandSceneController(scene, carousel, experiences, cursor, audio, handPointer);
   const debugHands = new HandDebugLayer(document.getElementById('hand-debug-layer') as HTMLCanvasElement);
 
   // ── Pointer / Touch Controller (No-Camera Mode) ──────────────────────────
@@ -121,7 +126,8 @@ async function bootstrap() {
     stage.classList.remove('camera-live');
     document.body.classList.remove('camera-live');
     debugHands.clear();
-    handRenderer.updateLandmarks(null, HandPresenceState.LOST, 0);
+    handRenderer?.updateLandmarks(null, HandPresenceState.LOST, 0);
+    handPointer.hide();
 
     if (btnModeTouch && btnModeCamera) {
       btnModeTouch.classList.add('active');
@@ -142,6 +148,7 @@ async function bootstrap() {
     aiBridge.cancelPending();
     handControl.reset();
     pointerController.disable();
+    cursor.hide();
     stage.classList.add('camera-live');
     document.body.classList.add('camera-live');
 
@@ -262,6 +269,7 @@ async function bootstrap() {
   let uncertainSince=0;
   let ambiguitySent=false;
   let lastTelemetry=0;
+  let lastFPS=0;
   const feedHand = (frame:HandFrame) => {
     if(!isCameraMode || document.hidden || !interactionFocused)return;
     const begin=performance.now();
@@ -292,6 +300,7 @@ async function bootstrap() {
     else if(r.target)coachmarks.showTip('pinch_hint','◎','PINCH TO OPEN · MOVE AN OPEN HAND TO BROWSE',4000);
     if(performance.now()-lastTelemetry>100){
       lastTelemetry=performance.now();
+      const drawStats=scene.getDrawStats();
       const fields:Record<string,string|number>={hand:r.handedness,handCount:r.handCount,presence:r.presence.state,
         trackConf:r.quality.toFixed(2),palmOpen:r.openness.toFixed(2),pose:r.pose,gesture:r.state,
         pinch:r.pinchDistance.toFixed(3),pinchRatio:(r.pinchRatio??r.pinchDistance).toFixed(3),
@@ -313,7 +322,13 @@ async function bootstrap() {
         h2Vel:r.hands?.[1]?`${r.hands[1].velocityX.toFixed(3)}, ${r.hands[1].velocityY.toFixed(3)}`:'—',
         h2Hand:r.hands?.[1]?.handedness??'—',
         classifyMs:(performance.now()-begin).toFixed(2),cameraFps:tracker.metrics.cameraFPS.toFixed(1),
-        trackingFps:tracker.metrics.trackingFPS.toFixed(1),inferenceMs:tracker.metrics.inferenceMs.toFixed(1),
+        trackingFps:tracker.metrics.trackingFPS.toFixed(1),renderFps:lastFPS.toString(),inferenceMs:tracker.metrics.inferenceMs.toFixed(1),
+        handDetected:frame.hands.some(h=>h.landmarks?.length===21)?'YES':'NO',
+        pointerRaw:r.raw? r.raw[8].x.toFixed(3)+', '+r.raw[8].y.toFixed(3):'—',
+        pointerFiltered:r.pointer?r.pointer.x.toFixed(3)+', '+r.pointer.y.toFixed(3):'—',
+        pointerScreen:handPointer.visible?`${Math.round(handPointer.x)}, ${Math.round(handPointer.y)}`:'—',
+        deviceProfile:perf.profile.name,pixelRatio:scene.renderer.getPixelRatio().toFixed(2),
+        activeParticles:drawStats.particles,drawCalls:drawStats.drawCalls,triangles:drawStats.triangles,
         socket:socket.isConnected()?'connected':'offline',localIntent:r.state,final:r.clickTarget??r.state};
       for(const [key,value]of Object.entries(fields))debug.update(key,value);
     }
@@ -321,17 +336,36 @@ async function bootstrap() {
   tracker.onUpdate(feedHand);
   if(import.meta.env.DEV){
     (window as any).__handTest={
-      feed:(frame:HandFrame)=>{isCameraMode=true;pointerController.disable();document.getElementById('modal-mode-select')?.classList.add('hidden');feedHand(frame);return handControl.result;},
+      feed:(frame:HandFrame)=>{isCameraMode=true;pointerController.disable();cursor.hide();document.getElementById('modal-mode-select')?.classList.add('hidden');feedHand(frame);handPointer.tick(performance.now());return handControl.result;},
       reset:()=>{handControl.reset();},
       snapshot:()=>({state:handControl.result?.state,clicks:handControl.clicks,angle:carousel.carouselAngle,
         index:carousel.getActiveCard(),scale:experiences.getZoom(),uiState:experiences.state.state,
         resources:{...scene.renderer.info.memory},aiPending:aiBridge.pendingCount,
         cursorVisible:cursor.group.visible,tracking:{...tracker.metrics},
         historySize:handControl.engine.history.length,cursor:cursor.group.position.toArray(),
+        pointerVisible:handPointer.visible,pointerState:handPointer.state,pointerXY:[handPointer.x,handPointer.y],
+        profile:perf.profile.name,pixelRatio:scene.renderer.getPixelRatio(),draw:scene.getDrawStats(),fps:lastFPS,
         cards:carousel.getCards().map((c,i)=>{const p=c.group.getWorldPosition(new THREE.Vector3()).project(scene.camera);return {id:'card-'+i,x:(p.x+1)/2,y:(1-p.y)/2,worldX:c.group.position.x,visible:c.group.visible};})}),
       hitTest:handControl.hitTest,
     };
   }
+
+  const applyProfile = (profile = perf.profile) => {
+    scene.applyProfile(profile);
+    globe.applyProfile(profile);
+    carousel.applyProfile(profile);
+    tracker.applyProfile(profile);
+  };
+  perf.onChange(applyProfile);
+
+  const refreshPointer = () => {
+    handPointer.refreshRect();
+    const previous = perf.profile.name;
+    perf.reclassify();
+    if (perf.profile.name !== previous) applyProfile();
+  };
+  window.addEventListener('resize', refreshPointer);
+  window.addEventListener('orientationchange', refreshPointer);
 
   // Default: start with pointer interaction enabled while awaiting mode selection
   pointerController.enable();
@@ -348,7 +382,6 @@ async function bootstrap() {
   const clock = new THREE.Clock();
   let   frameCount = 0;
   let   fpsTimer   = 0;
-  let   lastFPS    = 0;
 
   function renderLoop() {
     requestAnimationFrame(renderLoop);
@@ -362,13 +395,23 @@ async function bootstrap() {
       frameCount = 0;
       fpsTimer   = 0;
       debug.update('fps', lastFPS.toString());
+      debug.update('renderFps', lastFPS.toString());
+      perf.sampleFps(lastFPS, performance.now());
+      const draw = scene.getDrawStats();
+      debug.update('deviceProfile', perf.profile.name);
+      debug.update('pixelRatio', draw.pixelRatio.toFixed(2));
+      debug.update('drawCalls', draw.drawCalls);
+      debug.update('triangles', draw.triangles);
+      debug.update('activeParticles', draw.particles);
     }
 
     if(isCameraMode){
       const presence=handControl.render(performance.now());
-      handRenderer.updateLandmarks(presence.landmarks,presence.state,presence.opacity);
-      handRenderer.setDebugMode(isLandmarkDebug?latestRawLandmarks:null,isLandmarkDebug?handControl.result?.landmarks??null:null,
+      handRenderer?.updateLandmarks(presence.landmarks,presence.state,presence.opacity);
+      handRenderer?.setDebugMode(isLandmarkDebug?latestRawLandmarks:null,isLandmarkDebug?handControl.result?.landmarks??null:null,
         isLandmarkDebug&&presence.state===HandPresenceState.TEMPORARILY_LOST?presence.landmarks:null);
+      debug.update('pointerScreen', handPointer.visible?`${Math.round(handPointer.x)}, ${Math.round(handPointer.y)}`:'—');
+      debug.update('handDetected', handControl.result?.raw ? 'YES' : 'NO');
       if(isLandmarkDebug&&(handControl.result?.raw||handControl.result?.landmarks)){
         debugHands.draw(
           [{landmarks:handControl.result.raw??handControl.result.landmarks??[]}],

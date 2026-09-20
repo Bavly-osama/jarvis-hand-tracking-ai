@@ -93,14 +93,26 @@ with sync_playwright() as p:
       const backZoom=await feed(two(.38));
       check('TEST 12 zoom hand loss',Math.abs((paused.zoom??api.snapshot().scale)-(active.zoom??1))<0.08&&Math.abs((backZoom.zoom??api.snapshot().scale)-(active.zoom??1))<0.1,{active:active.zoom,paused:paused.zoom,back:backZoom.zoom});
 
+      api.reset();await wait(200);
+      const shown=await feed([hand(.42,.38)]);
+      const pointer=document.getElementById('hand-pointer');
+      const snap=api.snapshot();
+      check('pointer appears without pinch',!!shown && snap.pointerVisible && pointer && parseFloat(getComputedStyle(pointer).opacity)>0 && snap.pointerState!=='LOST',{state:snap.pointerState,opacity:pointer&&getComputedStyle(pointer).opacity,xy:snap.pointerXY});
+      await wait(70);
+      check('pointer holds brief loss',api.snapshot().pointerVisible,api.snapshot().pointerState);
+      await wait(420);
+      check('pointer hides after 400ms',!api.snapshot().pointerVisible,{state:api.snapshot().pointerState});
+
       return report;
     }''')
     page.screenshot(path=str(ROOT/'hand-qa-desktop.png'))
     for width,height in [(390,844),(844,390)]:
         page.set_viewport_size({'width':width,'height':height})
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(800)
         layout=page.evaluate('({overflow:document.documentElement.scrollWidth>innerWidth+1, canvas:!!document.querySelector("canvas")})')
+        snap=page.evaluate('window.__handTest.snapshot()')
         results.append({'name':f'layout {width}x{height}','ok':not layout['overflow'] and layout['canvas'],'data':layout})
+        results.append({'name':f'mobile metrics {width}x{height}','ok':True,'data':{'profile':snap.get('profile'),'pixelRatio':snap.get('pixelRatio'),'fps':snap.get('fps'),'draw':snap.get('draw'),'tracking':snap.get('tracking')}})
         page.screenshot(path=str(ROOT/f'hand-qa-{width}.png'))
     results.append({'name':'uncaught exceptions','ok':not errors,'data':errors})
     (ROOT/'qa-results.json').write_text(json.dumps(results,indent=2))

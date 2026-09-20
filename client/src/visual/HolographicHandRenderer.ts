@@ -36,6 +36,9 @@ export class HolographicHandRenderer {
 
   // Constants
   private readonly TIPS = [4, 8, 12, 16, 20];
+  private tempVec1 = new THREE.Vector3();
+  private tempVec2 = new THREE.Vector3();
+  private tempVec3 = new THREE.Vector3();
   
   constructor(scene: THREE.Scene, private camera: THREE.Camera) {
     this.scene = scene;
@@ -199,19 +202,15 @@ export class HolographicHandRenderer {
     alpha.needsUpdate=true;
     this.group.traverse(object=>{object.frustumCulled=false;});
 
-    // Prepare temp vector
-    const tempVec1 = new THREE.Vector3();
-    const tempVec2 = new THREE.Vector3();
-
     // Update Skeleton
     const skelPos = this.skeletonLines.geometry.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
       const [startIdx, endIdx] = HAND_CONNECTIONS[i];
-      this.toWorldPos(landmarks[startIdx], tempVec1);
-      this.toWorldPos(landmarks[endIdx], tempVec2);
+      this.toWorldPos(landmarks[startIdx], this.tempVec1);
+      this.toWorldPos(landmarks[endIdx], this.tempVec2);
       
-      skelPos.setXYZ(i * 2, tempVec1.x, tempVec1.y, tempVec1.z);
-      skelPos.setXYZ(i * 2 + 1, tempVec2.x, tempVec2.y, tempVec2.z);
+      skelPos.setXYZ(i * 2, this.tempVec1.x, this.tempVec1.y, this.tempVec1.z);
+      skelPos.setXYZ(i * 2 + 1, this.tempVec2.x, this.tempVec2.y, this.tempVec2.z);
     }
     skelPos.needsUpdate = true;
 
@@ -220,46 +219,44 @@ export class HolographicHandRenderer {
     for (let i = 0; i < PALM_INDICES.length; i++) {
       const startIdx = PALM_INDICES[i];
       const endIdx = PALM_INDICES[(i + 1) % PALM_INDICES.length]; // Connect back to form a loop
-      this.toWorldPos(landmarks[startIdx], tempVec1);
-      this.toWorldPos(landmarks[endIdx], tempVec2);
+      this.toWorldPos(landmarks[startIdx], this.tempVec1);
+      this.toWorldPos(landmarks[endIdx], this.tempVec2);
       
-      palmPos.setXYZ(i * 2, tempVec1.x, tempVec1.y, tempVec1.z);
-      palmPos.setXYZ(i * 2 + 1, tempVec2.x, tempVec2.y, tempVec2.z);
+      palmPos.setXYZ(i * 2, this.tempVec1.x, this.tempVec1.y, this.tempVec1.z);
+      palmPos.setXYZ(i * 2 + 1, this.tempVec2.x, this.tempVec2.y, this.tempVec2.z);
     }
     palmPos.needsUpdate = true;
 
     // Update Palm Surface (naive triangulation for demonstration)
     const palmSurfPos = this.palmSurface.geometry.attributes.position as THREE.BufferAttribute;
     const originIdx = PALM_INDICES[0];
-    this.toWorldPos(landmarks[originIdx], tempVec1);
+    this.toWorldPos(landmarks[originIdx], this.tempVec1);
     
     for (let i = 1; i < PALM_INDICES.length - 1; i++) {
       const idx2 = PALM_INDICES[i];
       const idx3 = PALM_INDICES[i + 1];
       
-      this.toWorldPos(landmarks[idx2], tempVec2);
-      
-      const v3 = new THREE.Vector3();
-      this.toWorldPos(landmarks[idx3], v3);
+      this.toWorldPos(landmarks[idx2], this.tempVec2);
+      this.toWorldPos(landmarks[idx3], this.tempVec3);
 
       const offset = (i - 1) * 3;
-      palmSurfPos.setXYZ(offset, tempVec1.x, tempVec1.y, tempVec1.z);
-      palmSurfPos.setXYZ(offset + 1, tempVec2.x, tempVec2.y, tempVec2.z);
-      palmSurfPos.setXYZ(offset + 2, v3.x, v3.y, v3.z);
+      palmSurfPos.setXYZ(offset, this.tempVec1.x, this.tempVec1.y, this.tempVec1.z);
+      palmSurfPos.setXYZ(offset + 1, this.tempVec2.x, this.tempVec2.y, this.tempVec2.z);
+      palmSurfPos.setXYZ(offset + 2, this.tempVec3.x, this.tempVec3.y, this.tempVec3.z);
     }
     palmSurfPos.needsUpdate = true;
 
     // Update Fingertips
     const tipPos = this.fingertipPoints.geometry.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < this.TIPS.length; i++) {
-      this.toWorldPos(landmarks[this.TIPS[i]], tempVec1);
-      tipPos.setXYZ(i, tempVec1.x, tempVec1.y, tempVec1.z);
+      this.toWorldPos(landmarks[this.TIPS[i]], this.tempVec1);
+      tipPos.setXYZ(i, this.tempVec1.x, this.tempVec1.y, this.tempVec1.z);
     }
     tipPos.needsUpdate = true;
 
     // Update Index Reticle
-    this.toWorldPos(landmarks[LM.INDEX_TIP], tempVec1);
-    this.indexReticle.position.copy(tempVec1);
+    this.toWorldPos(landmarks[LM.INDEX_TIP], this.tempVec1);
+    this.indexReticle.position.copy(this.tempVec1);
     // Orient reticle slightly to face camera (assuming camera at origin)
     this.indexReticle.quaternion.copy(this.camera.quaternion);
     this.indexReticle.visible = true;
@@ -273,10 +270,9 @@ export class HolographicHandRenderer {
       }
       points.visible = true;
       const posAttr = points.geometry.attributes.position as THREE.BufferAttribute;
-      const v = new THREE.Vector3();
       for (let i = 0; i < 21; i++) {
-        this.toWorldPos(marks[i], v);
-        posAttr.setXYZ(i, v.x, v.y, v.z);
+        this.toWorldPos(marks[i], this.tempVec3);
+        posAttr.setXYZ(i, this.tempVec3.x, this.tempVec3.y, this.tempVec3.z);
       }
       posAttr.needsUpdate = true;
     };

@@ -23,7 +23,7 @@ export class HolographicCard {
   private previousX = 0;
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  constructor(title: string) {
+  constructor(title: string, options?: { transmission?: boolean }) {
     this.title = title;
     this.group = new THREE.Group();
 
@@ -47,11 +47,17 @@ export class HolographicCard {
 
     this.mesh = new THREE.Mesh(geometry, material);
     this.group.add(this.mesh);
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(1.49, 1.865), new THREE.MeshPhysicalMaterial({
-      color: '#263a4c', metalness: 0.15, roughness: 0.22, transmission: 0.08,
-      thickness: 0.04, ior: 1.45, clearcoat: 1, transparent: true, opacity: 0.16,
-      depthWrite: false, side: THREE.DoubleSide
-    }));
+    const glassMat = options?.transmission === false
+      ? new THREE.MeshStandardMaterial({
+          color: '#263a4c', metalness: 0.15, roughness: 0.35, transparent: true, opacity: 0.16,
+          depthWrite: false, side: THREE.DoubleSide
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color: '#263a4c', metalness: 0.15, roughness: 0.22, transmission: 0.08,
+          thickness: 0.04, ior: 1.45, clearcoat: 1, transparent: true, opacity: 0.16,
+          depthWrite: false, side: THREE.DoubleSide
+        });
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(1.49, 1.865), glassMat);
     glass.position.z = -0.015;
     this.group.add(glass);
 

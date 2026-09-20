@@ -53,7 +53,8 @@ export class FingertipCursor {
   private trailSizes:     Float32Array = new Float32Array(0);
   private readonly TRAIL_COUNT = 16;
 
-  private visible_: boolean = false;
+  private facing = new THREE.Vector3();
+  private visible_ = false;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -277,7 +278,8 @@ export class FingertipCursor {
     this.currentZ = sz.position; this.velZ = sz.velocity;
 
     this.group.position.set(this.currentX, this.currentY, this.currentZ);
-    this.group.lookAt(this.group.position.clone().add(new THREE.Vector3(0, 0, 1)));
+    this.facing.set(this.currentX, this.currentY, this.currentZ + 1);
+    this.group.lookAt(this.facing);
 
     // Apply presence opacity to all materials
     const opacityMult = this.currentOpacity;

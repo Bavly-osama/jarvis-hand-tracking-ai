@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitalSystem } from './OrbitalSystem';
 import { ShaderLibrary } from './ShaderLibrary';
 import { PhysicsController } from '../animation/PhysicsController';
+import type { PerformanceSettings } from '../perf/PerformanceProfileManager';
 
 // ─── Zoom level detail types ────────────────────────────────────────────────
 interface CityNode {
@@ -63,13 +64,15 @@ export class GlobeController {
   private targetScale:  number = 1.0;
   private scaleVelocity:number = 0;
   private currentZoomLevel: number = 1;
+  private globeSegments = 64;
 
   // Arc animation time
   private arcTime: number = 0;
 
-  constructor() {
+  constructor(profile?: Pick<PerformanceSettings, 'globeSegments' | 'clouds' | 'orbitClutter'>) {
     this.group = new THREE.Group();
     this.group.position.y = 0.5;
+    this.globeSegments = profile?.globeSegments ?? 64;
     this.group.add(this.orbits);
     this._buildGlobe();
     this._buildAtmosphere();
@@ -80,12 +83,18 @@ export class GlobeController {
     this._buildCityNodes();
     this._buildInfoOverlays();
     this._setZoomLevelVisibility(1);
+    if (profile) this.applyProfile(profile);
+  }
+
+  applyProfile(profile: Pick<PerformanceSettings, 'clouds' | 'orbitClutter'>) {
+    this.cloudLayer.visible = profile.clouds !== false;
+    this.orbits.visible = profile.orbitClutter !== false;
   }
 
   // ── Construction helpers ──────────────────────────────────────────────────
 
   private _buildGlobe() {
-    const geo = new THREE.SphereGeometry(1.5, 64, 64);
+    const geo = new THREE.SphereGeometry(1.5, this.globeSegments, this.globeSegments);
     const mat = new THREE.MeshStandardMaterial({
       color: 0xb5bec9, roughness: 0.88, metalness: 0.08,
       emissive: new THREE.Color('#ffca88'), emissiveIntensity: 1.1
@@ -106,7 +115,7 @@ export class GlobeController {
   }
 
   private _buildAtmosphere() {
-    const geo = new THREE.SphereGeometry(1.545, 64, 64);
+    const geo = new THREE.SphereGeometry(1.545, this.globeSegments, this.globeSegments);
     const mat = new THREE.ShaderMaterial({
       vertexShader:   ShaderLibrary.atmosphere.vertexShader,
       fragmentShader: ShaderLibrary.atmosphere.fragmentShader,
@@ -124,7 +133,7 @@ export class GlobeController {
   }
 
   private _buildCloudLayer() {
-    const geo = new THREE.SphereGeometry(1.52, 64, 64);
+    const geo = new THREE.SphereGeometry(1.52, this.globeSegments, this.globeSegments);
     const mat = new THREE.MeshStandardMaterial({
       roughness: 1,
       transparent: true,
@@ -145,7 +154,7 @@ export class GlobeController {
 
   private _buildNightLayer() {
     // Night lights as additive overlay on the night side
-    const geo = new THREE.SphereGeometry(1.501, 64, 64);
+    const geo = new THREE.SphereGeometry(1.501, this.globeSegments, this.globeSegments);
     const mat = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity:     0.0,

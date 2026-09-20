@@ -5,25 +5,31 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import type { PerformanceSettings } from '../perf/PerformanceProfileManager';
+import { PROFILE_PRESETS } from '../perf/PerformanceProfileManager';
 
 export class SceneManager {
   public scene = new THREE.Scene();
   public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
-  private composer: EffectComposer;
-  private aa = new ShaderPass(FXAAShader);
+  private composer: EffectComposer | null = null;
+  private aa: ShaderPass | null = null;
   private dust: THREE.Points;
   private floor: THREE.Mesh;
   private time = 0;
+  private usePost = true;
+  private settings: PerformanceSettings;
+  private lastDraw = { pixelRatio: 1, drawCalls: 0, triangles: 0, particles: 180 };
   private resize = () => this.onResize();
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, profile: PerformanceSettings = PROFILE_PRESETS.HIGH) {
+    this.settings = profile;
     this.scene.background = null;
     this.camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: !profile.bloom, alpha: true, premultipliedAlpha: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.setClearAlpha(0);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, profile.pixelRatioCap));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
@@ -35,14 +41,19 @@ export class SceneManager {
     const rim = new THREE.DirectionalLight('#537cae', 0.65);
     rim.position.set(4, 1, -3);
     this.scene.add(key, rim);
-    this.composer = new EffectComposer(this.renderer);
-    const renderPass = new RenderPass(this.scene, this.camera);
-    renderPass.clearAlpha = 0;
-    this.composer.addPass(renderPass);
-    // HDR threshold limits bloom to deliberately over-range highlights.
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.35, 1.05));
-    this.composer.addPass(new OutputPass());
-    this.composer.addPass(this.aa);
+    this.usePost = profile.bloom || profile.fxaa;
+    if (this.usePost) {
+      this.composer = new EffectComposer(this.renderer);
+      const renderPass = new RenderPass(this.scene, this.camera);
+      renderPass.clearAlpha = 0;
+      this.composer.addPass(renderPass);
+      if (profile.bloom) this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.3, 0.35, 1.05));
+      this.composer.addPass(new OutputPass());
+      if (profile.fxaa) {
+        this.aa = new ShaderPass(FXAAShader);
+        this.composer.addPass(this.aa);
+      }
+    }
     const positions = new Float32Array(180 * 3);
     for (let i = 0; i < 180; i++) {
       positions[i * 3] = Math.sin(i * 127.1) * 18;
@@ -66,14 +77,33 @@ export class SceneManager {
     this.floor.rotation.x = -Math.PI / 2;
     this.floor.position.y = -2.05;
     this.scene.add(this.floor);
+    this.applyProfile(profile);
     this.onResize();
     window.addEventListener('resize', this.resize);
   }
+  applyProfile(profile: PerformanceSettings) {
+    this.settings = profile;
+    this.usePost = !!(this.composer && (profile.bloom || profile.fxaa));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, profile.pixelRatioCap));
+    this.dust.geometry.setDrawRange(0, profile.dustPoints);
+    this.floor.visible = true;
+  }
   render(delta = 0.016) {
-    this.time += this.reduced.matches ? 0 : Math.min(delta, 0.05);
+    const animate = this.settings.floorAnimation && !this.reduced.matches;
+    this.time += animate ? Math.min(delta, 0.05) : 0;
     this.dust.rotation.y = this.time * 0.002;
-    (this.floor.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
-    this.composer.render();
+    if (animate) (this.floor.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
+    if (this.usePost && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
+    this.lastDraw = {
+      pixelRatio: this.renderer.getPixelRatio(),
+      drawCalls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      particles: this.dust.geometry.drawRange.count,
+    };
+  }
+  getDrawStats() {
+    return { ...this.lastDraw };
   }
   private onResize() {
     const aspect = innerWidth / innerHeight;
@@ -82,10 +112,11 @@ export class SceneManager {
     this.camera.lookAt(0, -0.2, 0);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
-    this.composer.setSize(innerWidth, innerHeight);
+    this.composer?.setSize(innerWidth, innerHeight);
     const ratio = this.renderer.getPixelRatio();
-    this.aa.uniforms.resolution.value.set(1 / (innerWidth * ratio), 1 / (innerHeight * ratio));
-    this.dust.geometry.setDrawRange(0, aspect < 0.8 ? 65 : 180);
+    this.aa?.uniforms.resolution.value.set(1 / (innerWidth * ratio), 1 / (innerHeight * ratio));
+    const cap = aspect < 0.8 ? Math.min(65, this.settings.dustPoints) : this.settings.dustPoints;
+    this.dust.geometry.setDrawRange(0, cap);
   }
   dispose() {
     window.removeEventListener('resize', this.resize);
@@ -94,8 +125,8 @@ export class SceneManager {
       mesh.geometry?.dispose();
       if (mesh.material) for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) material.dispose();
     });
-    this.composer.passes.forEach(pass => pass.dispose());
-    this.composer.dispose();
+    this.composer?.passes.forEach(pass => pass.dispose());
+    this.composer?.dispose();
     this.renderer.dispose();
   }
 }

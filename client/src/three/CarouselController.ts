@@ -23,6 +23,7 @@ export class CarouselController {
   private timeline?: gsap.core.Timeline;
   private outgoingIndex = 0;
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  private maxVisibleCards = 10;
   // Hover
   private hoveredIndex: number = -1;
   private handDragging=false;
@@ -64,13 +65,17 @@ export class CarouselController {
   public setHandZoom(scale:number){this.handScale=scale;}
   public setHandPress(target:string|null,progress:number){this.pressedIndex=target?.startsWith('card-')?Number(target.slice(5)):-1;this.pressProgress=progress;}
 
-  constructor() {
+  constructor(options?: { visibleCards?: number; cardTransmission?: boolean }) {
     this.group = new THREE.Group();
+    this.maxVisibleCards = options?.visibleCards ?? 10;
     for (let i = 0; i < NUM_CARDS; i++) {
-      const card = new HolographicCard(CARD_TITLES[i]);
+      const card = new HolographicCard(CARD_TITLES[i], { transmission: options?.cardTransmission !== false });
       this.cards.push(card);
       this.group.add(card.group);
     }
+  }
+  applyProfile(options: { visibleCards?: number }) {
+    if (options.visibleCards) this.maxVisibleCards = options.visibleCards;
   }
 
   // ── Gesture API ────────────────────────────────────────────────────────────
@@ -137,6 +142,8 @@ export class CarouselController {
     const activeIndex = this.navigation.index;
     const opening = this.presentation.open;
     // ── Position each card on the circle ──────────────────────────────────
+    const reduced = this.reduced.matches;
+    const neighborSpan = Math.max(1, Math.floor((this.maxVisibleCards - 1) / 2));
     for (let i = 0; i < NUM_CARDS; i++) {
       const cardBaseAngle = i * CARD_STEP;
       const relAngle      = cardBaseAngle - this.carouselAngle;
@@ -153,6 +160,8 @@ export class CarouselController {
 
       // Active card: push forward, full scale
       const isActive = i === activeIndex;
+      const wrap = Math.min(Math.abs(i - activeIndex), NUM_CARDS - Math.abs(i - activeIndex));
+      const inBudget = this.maxVisibleCards >= NUM_CARDS || wrap <= neighborSpan;
       const targetZ = (isActive ? z + 0.32 + opening * 1.6 : z - opening * 4) - (i===this.pressedIndex?this.pressProgress*.1:0);
       const targetScl = isActive
         ? 1.14 * (1 + opening * 2.0) * this.handScale
@@ -161,7 +170,8 @@ export class CarouselController {
       // Smooth position / scale
       this.cards[i].group.position.x = PhysicsController.lerp(this.cards[i].group.position.x, x * (isActive ? 1 - opening : 1 + opening * 0.3), delta * 10);
       this.cards[i].group.position.z = PhysicsController.lerp(this.cards[i].group.position.z, targetZ, delta * 10);
-      this.cards[i].group.position.y = -0.95 + (isActive ? opening * 1.0 : 0) + (1 - depth) * 0.65 + (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : Math.sin(time * 0.45 + i) * 0.018);
+      const bob = !reduced && inBudget ? Math.sin(time * 0.45 + i) * 0.018 : 0;
+      this.cards[i].group.position.y = -0.95 + (isActive ? opening * 1.0 : 0) + (1 - depth) * 0.65 + bob;
 
       const currentScale = this.cards[i].group.scale.x;
       const newScale = PhysicsController.lerp(currentScale, targetScl, delta * 10);
@@ -169,7 +179,9 @@ export class CarouselController {
 
       // Face center
       this.cards[i].group.rotation.y = PhysicsController.lerp(this.cards[i].group.rotation.y, -Math.sin(normAngle) * 0.42, delta * 8);
-      this.cards[i].group.visible = window.innerWidth / window.innerHeight >= 0.8 || depth > 0.87;
+      this.cards[i].group.visible = inBudget && (window.innerWidth / window.innerHeight >= 0.8 || depth > 0.87 || wrap <= 1);
+
+      if (!this.cards[i].group.visible) continue;
 
       // Opacity via material uniform
       const mat = (this.cards[i].mesh.material as THREE.ShaderMaterial).uniforms;
